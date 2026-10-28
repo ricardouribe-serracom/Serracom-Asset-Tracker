@@ -1,0 +1,1230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Red Tags">
+<meta name="theme-color" content="#00456F">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" type="image/png" href="icon-192.png">
+<script src="config.js"></script>
+<script>if("serviceWorker" in navigator) addEventListener("load",function(){ navigator.serviceWorker.register("sw.js").catch(function(){}); });</script>
+<meta charset="utf-8">
+<meta name="color-scheme" content="light only">
+<title>Red Tag Tracker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Serracom navy #00456F + orange #FF6600. Red stays for warnings and open red tags. */
+/* Layout: phone-first single column (max 880px), sticky header with market switch, fixed bottom tab bar; swap records drawn as hang tags */
+:root{
+  --bg:#ECEFF2; --surface:#FFFFFF; --surface-2:#F5F7F9; --ink:#1B2228; --muted:#5A6670; --line:#D3D9DF;
+  --crit:#C21F2E; --crit-soft:#F8E1E3; --brand:#00456F; --brand-hd:#00456F; --accent:#FF6600; --accent-btn:#C24E00; --on-accent:#FFFFFF; --head:#00456F; --chart:#00456F; --ok:#1E7448; --ok-soft:#DDEFE5; --warn:#9A5B00; --warn-soft:#F6EAD2; --chip:#E1E6EA;
+  --display:"Barlow Condensed","Arial Narrow",Arial,sans-serif;
+  --body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+  --gut-l:max(16px, env(safe-area-inset-left, 0px));
+  --gut-r:max(16px, env(safe-area-inset-right, 0px));
+  color-scheme:light;
+}
+
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font:15px/1.5 var(--body);
+  padding-left:var(--gut-l);padding-right:var(--gut-r);padding-block:0 calc(88px + env(safe-area-inset-bottom,0px))}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--brand-hd)}
+h1,h2,h3{font-family:var(--display);font-weight:700;letter-spacing:.01em;line-height:1.1;margin:0;text-wrap:balance}
+button,input,select,textarea{font:inherit;color:inherit}
+a{color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.mono{font-family:var(--mono);font-size:.88em;letter-spacing:.02em}
+
+header.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--brand-hd);color:#fff;border-bottom:3px solid var(--accent);
+  margin-left:calc(-1 * var(--gut-l));margin-right:calc(-1 * var(--gut-r));padding:10px var(--gut-r) 10px var(--gut-l)}
+.top-in{max-width:880px;margin:0 auto;display:flex;align-items:center;gap:10px 12px;flex-wrap:wrap}
+.brand{display:flex;align-items:center;gap:10px;min-width:0}
+.brand img{flex:none;display:block;height:40px;width:auto}
+.brand h1{font-size:24px;text-transform:uppercase}
+.brand small{display:block;color:rgba(255,255,255,.78);font-size:12px;font-family:var(--body);letter-spacing:0;text-transform:none;font-weight:400}
+.top-in .sp{flex:1}
+.mkt{display:inline-grid;grid-template-columns:1fr 1fr;background:rgba(255,255,255,.14);border-radius:10px;padding:3px;gap:3px}
+.mkt button{border:0;background:none;border-radius:8px;padding:6px 12px;font-size:13px;font-weight:600;color:rgba(255,255,255,.85);cursor:pointer;white-space:nowrap}
+.mkt button[aria-pressed="true"]{background:#fff;color:#00456F;box-shadow:0 1px 2px rgba(0,0,0,.12)}
+
+main{max-width:880px;margin:0 auto;padding-top:14px;display:grid;gap:22px}
+.live{display:flex;gap:8px 12px;align-items:center;flex-wrap:wrap;font-size:13px;color:var(--muted)}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--ok);flex:none}
+.dot.stale{background:var(--warn)}
+.ghost{background:none;border:1px solid var(--line);border-radius:8px;padding:4px 10px;font-size:13px;color:var(--muted);cursor:pointer;text-decoration:none}
+.ghost:hover{color:var(--ink)}
+section{display:grid;gap:12px;min-width:0}
+.sec-h{display:flex;align-items:baseline;justify-content:space-between;gap:4px 12px;flex-wrap:wrap}
+.sec-h h2{font-size:22px;text-transform:uppercase;color:var(--head)}
+.sec-h p{margin:0;color:var(--muted);font-size:13px}
+.note{font-size:13px;color:var(--muted);margin:0}
+
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.stat{background:var(--surface);border-radius:10px;padding:12px 14px;display:grid;gap:2px}
+.stat .v{font-family:var(--display);font-size:38px;font-weight:700;line-height:1;font-variant-numeric:tabular-nums}
+.stat .l{font-size:13px;color:var(--muted)}
+.stat.hot .v{color:var(--crit)}
+
+.flags{display:grid;gap:8px}
+.flag{display:grid;grid-template-columns:6px minmax(0,1fr);background:var(--surface);border-radius:8px;overflow:hidden}
+.flag i{background:var(--warn)}
+.flag.crit i{background:var(--crit)}
+.flag div{padding:10px 14px;min-width:0}
+.flag strong{display:block;font-weight:600}
+.flag span{color:var(--muted);font-size:13px;overflow-wrap:anywhere}
+.allclear{background:var(--ok-soft);color:var(--ok);border-radius:8px;padding:10px 14px;font-weight:500}
+
+.tbl-wrap{overflow-x:auto;background:var(--surface);border-radius:10px}
+table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}
+th,td{padding:9px 12px;text-align:right;border-bottom:1px solid var(--line);white-space:nowrap}
+th:first-child,td:first-child{text-align:left}
+th{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:600}
+tr:last-child td{border-bottom:0}
+td.low{color:var(--warn);font-weight:600}
+td .lowtag{font-size:11px;background:var(--warn-soft);color:var(--warn);border-radius:4px;padding:1px 6px;margin-left:6px;letter-spacing:.04em}
+
+.bars{background:var(--surface);border-radius:10px;padding:14px;display:grid;gap:10px}
+.bar{display:grid;grid-template-columns:minmax(0,1fr) 34px;gap:4px 10px;align-items:center}
+.bar .n{font-size:13px;min-width:0}
+.bar .c{text-align:right;font-variant-numeric:tabular-nums;font-weight:600;grid-row:span 2}
+.bar .track{height:8px;background:var(--chip);border-radius:4px;overflow:hidden}
+.bar .fill{height:100%;background:var(--chart);border-radius:4px}
+
+.controls{display:grid;gap:10px}
+.search{width:100%;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chip{background:var(--chip);border:1px solid transparent;border-radius:999px;padding:5px 12px;font-size:13px;cursor:pointer}
+.chip[aria-pressed="true"]{background:var(--ink);color:var(--surface)}
+.model{display:inline-block;font-family:var(--display);font-weight:700;font-size:14px;letter-spacing:.04em;background:var(--chip);border-radius:4px;padding:0 6px}
+
+.list{display:grid;gap:6px}
+.row{background:var(--surface);border-radius:10px;padding:10px 14px;display:grid;gap:4px}
+.row .main{display:flex;gap:8px;align-items:center;flex-wrap:wrap;min-width:0}
+.row .sub{display:flex;gap:4px 10px;flex-wrap:wrap;font-size:13px;color:var(--muted)}
+.pill{font-size:11px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;border-radius:4px;padding:2px 7px;white-space:nowrap}
+.pill.good{background:var(--ok-soft);color:var(--ok)}
+.pill.bad{background:var(--crit-soft);color:var(--crit)}
+.pill.warn{background:var(--warn-soft);color:var(--warn)}
+.empty{color:var(--muted);background:var(--surface);border-radius:10px;padding:18px;text-align:center}
+
+.tags{display:grid;gap:10px;grid-template-columns:repeat(auto-fill,minmax(min(100%,380px),1fr))}
+.tag{position:relative;background:var(--surface);padding:14px 16px 14px 40px;display:grid;gap:8px;min-width:0;align-content:start;
+  clip-path:polygon(16px 0,100% 0,100% 100%,16px 100%,0 calc(100% - 16px),0 16px)}
+.tag::before{content:"";position:absolute;left:12px;top:50%;width:12px;height:12px;margin-top:-6px;border-radius:50%;background:var(--bg);box-shadow:0 0 0 3px var(--crit)}
+.tag.done::before{box-shadow:0 0 0 3px var(--line)}
+.tag .t1{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.tag .site{font-family:var(--display);font-size:22px;font-weight:700;letter-spacing:.03em}
+.tag .date{margin-left:auto;font-size:12px;color:var(--muted)}
+.tag dl{margin:0;display:grid;grid-template-columns:auto minmax(0,1fr);gap:2px 12px;font-size:13px}
+.tag dt{color:var(--muted)}
+.tag dd{margin:0;overflow-wrap:anywhere}
+.tag .t3{display:flex;gap:6px 10px;align-items:center;flex-wrap:wrap;font-size:13px}
+.tag .t3 a{color:var(--muted)}
+
+.panel{background:var(--surface);border-radius:12px;padding:16px;display:grid;gap:12px}
+.panel label{display:grid;gap:4px;font-size:13px;font-weight:500}
+.panel input{width:100%;background:var(--surface-2);border:1px solid var(--line);border-radius:8px;padding:10px;font-family:var(--mono);font-size:15px}
+.verdict{border-radius:8px;padding:10px 12px;font-weight:600}
+.verdict.ok{background:var(--ok-soft);color:var(--ok)}
+.verdict.bad{background:var(--crit-soft);color:var(--crit)}
+.verdict.warn{background:var(--warn-soft);color:var(--warn)}
+.hits{display:grid;gap:4px;font-size:14px;margin:0;padding-left:18px}
+.btn{display:inline-block;border:0;border-radius:8px;padding:9px 14px;font-weight:600;cursor:pointer;background:var(--brand);color:#fff;text-decoration:none;text-align:center}
+.btn.red{background:var(--accent-btn);color:var(--on-accent)}
+.btn.quiet{background:var(--chip);color:var(--ink)}
+.actions{display:flex;gap:10px;flex-wrap:wrap}
+
+.state{background:var(--surface);border-radius:12px;padding:22px 18px;display:grid;gap:10px;justify-items:start}
+.state h2{font-size:24px;text-transform:uppercase}
+.state p{margin:0;max-width:60ch;color:var(--muted)}
+.state.err h2{color:var(--crit)}
+.skel{height:12px;border-radius:6px;background:var(--chip);width:100%}
+.skel.s{width:60%}
+@media (prefers-reduced-motion: no-preference){ .skel{animation:pulse 1.4s ease-in-out infinite} @keyframes pulse{50%{opacity:.5}} }
+.banner{background:var(--warn-soft);color:var(--warn);border-radius:8px;padding:8px 12px;font-size:13px}
+
+nav.tabs{position:fixed;left:0;right:0;bottom:0;z-index:6;background:var(--surface);border-top:1px solid var(--line);
+  padding:6px var(--gut-r) calc(6px + env(safe-area-inset-bottom,0px)) var(--gut-l)}
+.tabs-in{max-width:880px;margin:0 auto;display:grid;grid-template-columns:repeat(4,1fr);gap:4px}
+.tabs button{background:none;border:0;border-radius:10px;padding:6px 4px;display:grid;justify-items:center;gap:2px;font-size:12px;font-weight:500;color:var(--muted);cursor:pointer;position:relative}
+.tabs button svg{width:22px;height:22px}
+.tabs button[aria-current="page"]{color:var(--head);background:var(--chip);box-shadow:inset 0 3px 0 var(--accent)}
+.tabs button.tool{color:var(--accent-btn)}
+.badge{position:absolute;top:2px;right:calc(50% - 22px);background:var(--crit);color:#fff;font-size:10px;font-weight:700;border-radius:999px;min-width:16px;height:16px;line-height:16px;padding:0 4px}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(84px + env(safe-area-inset-bottom,0px));background:var(--ink);color:var(--surface);
+  padding:9px 16px;border-radius:999px;font-size:14px;font-weight:500;z-index:9;max-width:calc(100% - 32px)}
+
+/* forms and edit controls */
+form{background:var(--surface);border-radius:12px;padding:16px;display:grid;gap:14px}
+.f2{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px}
+form label{display:grid;gap:4px;font-size:13px;font-weight:500;min-width:0}
+.hint{font-weight:400;color:var(--muted);font-size:12px;min-height:1em}
+.hint.err{color:var(--crit)}
+.hint.ok{color:var(--ok)}
+form input[type=text],form select,form textarea{width:100%;background:var(--surface-2);border:1px solid var(--line);border-radius:8px;padding:9px 10px;font-size:15px}
+form input.mono{font-family:var(--mono);font-size:14px}
+form textarea{min-height:64px;resize:vertical}
+.check{display:flex !important;grid-template-columns:none;align-items:center;gap:8px;font-weight:400 !important}
+.check input{width:18px;height:18px}
+.photos{display:flex;gap:10px;flex-wrap:wrap}
+.photos label{display:grid;gap:6px;justify-items:start}
+.thumb{width:72px;height:72px;object-fit:cover;border-radius:8px;background:var(--chip)}
+.formerr{background:var(--crit-soft);color:var(--crit);border-radius:8px;padding:10px 12px;font-size:14px}
+.row{grid-template-columns:minmax(0,1fr) auto;align-items:center}
+.row .main,.row .sub{grid-column:1}
+.row .move{grid-column:2;grid-row:1/span 2;background:var(--surface-2);border:1px solid var(--line);border-radius:8px;padding:5px 8px;font-size:13px;max-width:44vw}
+.tag img.ph{width:56px;height:56px;object-fit:cover;border-radius:6px;background:var(--chip)}
+.btn.sm{padding:5px 10px;font-size:13px}
+.btn[disabled]{opacity:.55;cursor:default}
+.who{color:var(--muted)}
+
+html{-webkit-text-size-adjust:100%}
+body{margin:0}
+[hidden]{display:none!important}
+img{max-width:100%}
+input,select,textarea{font-size:16px}
+
+.sfield{display:grid;gap:4px;font-size:13px;font-weight:500;min-width:0}
+.srow{display:flex;gap:8px;align-items:stretch;min-width:0}
+.srow input{flex:1;min-width:0;width:auto}
+.scanbtn{display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+input[readonly][data-mode="scan"]{background:var(--surface);border-style:dashed;cursor:default}
+input[readonly][data-mode="scan"]:not(:placeholder-shown){border-style:solid;font-weight:600}
+.sfield input[type=text]{width:100%;background:var(--surface-2);border:1px solid var(--line);border-radius:8px;padding:9px 10px;font-size:16px;font-family:var(--mono)}
+.linkbtn{background:none;border:0;padding:2px 0;color:var(--muted);font-size:12px;font-weight:400;text-decoration:underline;cursor:pointer;justify-self:start}
+.linkbtn:hover{color:var(--ink)}
+.scan-ov{position:fixed;inset:0;z-index:30;background:rgba(8,12,16,.6);display:grid;place-items:center;padding:16px}
+.scan-card{background:var(--surface);color:var(--ink);border-radius:14px;padding:18px;width:100%;max-width:380px;display:grid;gap:12px}
+.scan-card h3{font-family:var(--display);font-size:22px;text-transform:uppercase;margin:0;letter-spacing:.01em}
+.scan-card p{margin:0}
+.choices{display:grid;gap:8px}
+.check-out{background:var(--surface);border-radius:10px;padding:12px 14px;display:grid;gap:8px}
+
+/* sign-in, account, transfer destination, installs */
+.signin{max-width:440px;margin:8px auto 0;width:100%}
+.signin label{width:100%}
+.signin input{width:100%;background:var(--surface-2);border:1px solid var(--line);border-radius:8px;padding:10px 12px;font-size:16px}
+.codein{font-size:26px;letter-spacing:.3em;text-align:center}
+.signin .btn{width:100%;padding:12px}
+.signin .actions{display:flex;flex-wrap:wrap;gap:4px 16px;width:100%;justify-content:space-between}
+.linkbtn{background:none;border:0;padding:6px 0;color:var(--brand);font:inherit;font-size:14px;text-decoration:underline;cursor:pointer}
+.acct{background:var(--surface);border-radius:10px;padding:12px 14px;display:flex;align-items:center;justify-content:space-between;gap:12px}
+.acct div{display:grid}
+.acct span{color:var(--muted);font-size:13px}
+fieldset.dest{border:0;margin:0;padding:0;min-width:0}
+fieldset.dest legend{font-weight:600;font-size:13px;padding:0;margin-bottom:6px}
+.seg{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.seg label{display:block;cursor:pointer;margin:0}
+.seg input{position:absolute;opacity:0;pointer-events:none}
+.seg span{display:grid;gap:2px;border:2px solid var(--line);border-radius:10px;padding:10px 12px;background:var(--surface);font-weight:600;text-align:center}
+.seg small{font-weight:400;color:var(--muted);font-size:12px}
+.seg input:checked+span{border-color:var(--brand);background:#E6EEF4;color:var(--brand);box-shadow:inset 0 -3px 0 var(--accent)}
+.seg input:focus-visible+span{outline:2px solid var(--accent);outline-offset:2px}
+.seg input:disabled+span{opacity:.5;cursor:not-allowed}
+.site-id{font-family:var(--mono);font-weight:500;color:var(--brand)}
+#instSec .search{margin-bottom:10px;width:100%}
+body{padding-top:env(safe-area-inset-top,0px)}
+.scan-ov.live .scan-card{max-width:460px}
+.viewfinder{position:relative;border-radius:10px;overflow:hidden;background:#000;aspect-ratio:3/4;max-height:58vh;width:100%}
+.viewfinder video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.viewfinder .aim{position:absolute;inset:14% 10%;border:3px solid var(--accent);border-radius:10px;box-shadow:0 0 0 999px rgba(0,0,0,.32)}
+@media (prefers-reduced-motion: no-preference){ .viewfinder .aim{animation:aim 1.6s ease-in-out infinite} @keyframes aim{50%{border-color:#fff}} }
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="top-in">
+    <div class="brand">
+      <img src="data:image/png;base64,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" alt="Serracom">
+      <div><h1>Red Tag Tracker</h1><small>Serracom · live from the inventory sheet</small></div>
+    </div>
+    <div class="sp"></div>
+    <div class="mkt" role="group" aria-label="Market" id="mktSwitch"><button type="button" data-m="AU">AU</button><button type="button" data-m="HN">HN</button></div>
+  </div>
+</header>
+
+<main id="app"></main>
+
+<nav class="tabs" aria-label="Sections">
+  <div class="tabs-in">
+    <button type="button" data-view="dashboard"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>Overview</button>
+    <button type="button" data-view="inventory"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7l9-4 9 4-9 4z"/><path d="M3 7v10l9 4 9-4V7"/><path d="M12 11v10"/></svg>Inventory</button>
+    <button type="button" data-view="install"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v12"/><path d="M8 21h8"/><path d="M9 21l3-12 3 12"/><circle cx="12" cy="7" r="1.6"/><path d="M8.5 3.5a5 5 0 0 0 0 7"/><path d="M15.5 3.5a5 5 0 0 1 0 7"/></svg>Install</button>
+    <button type="button" data-view="tags"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3h13v18H8l-5-5V8z"/><circle cx="8.5" cy="12" r="1.6"/></svg>Red tags<span class="badge" id="openBadge" hidden></span></button>
+  </div>
+</nav>
+<div id="toastHost"></div>
+
+<script>
+(function(){
+var REASONS=["Will Not Power Up","Fault/OSS Alarms will not clear","RF Intermittent Performance/RTWP/VSWR","Cannot Detect/Access","Heat Related (Fan Failure)","Unstable/Resets","Damage Port/Connector/Interface","Physically Defective (non-connectors and interface)","Cannot Load Software","Cannot Upgrade Due to Hardware Version Level","Failed Light Test/Will Not Pass Light (Hybrid/Fiber Jumpers)","Water in unit"];
+var MARKETS={AU:{name:"AU",store:"AU WAREHOUSE",sitePh:"TK02047"},HN:{name:"HN",store:"HN WAREHOUSE",sitePh:"A3H0170A"}};
+var NOT_SPARE=["SITE","TELLWORKS"];
+var DEFAULT_MODELS=["AEHC","AAFIA","AHLOA","AHFIG","AHLOB","AHFII","FXFC","FXFB","AVHA"];
+var store={get:function(k){try{return localStorage.getItem(k);}catch(e){return null;}},set:function(k,v){try{localStorage.setItem(k,v);}catch(e){}}};
+var cur=MARKETS[store.get("rtt-market")]?store.get("rtt-market"):"AU";
+var token=store.get("rtt-token")||"", user=null, isMgr=false, team={};
+var data=null, raw=null, state={phase:token?"loading":"signin",msg:""}, lastLoad=0, loading=false, LOOKUP={};
+var signStep="email", signEmail=store.get("rtt-email")||"";
+var esc=function(s){return String(s==null?"":s).replace(/[&<>"']/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];});};
+var S=function(v){return v==null?"":String(v).trim();};
+var SN=function(v){return S(v).toUpperCase().replace(/\s+/g,"").replace(/^\(S\)/,"");};
+var H=function(v){return S(v).toUpperCase();};
+function title(s){ return S(s).toLowerCase().replace(/\b\w/g,function(c){return c.toUpperCase();}).replace(/\b(Au|Hn|Jr)\b/g,function(x){return x.toUpperCase();}); }
+function normSite(s,m){ s=S(s).toUpperCase().replace(/\s+/g,""); if(m!=="AU") return s; var x=s.match(/^([A-Z]{2})0*(\d{1,5})([A-Z]?)$/); return x? x[1]+x[2].padStart(5,"0")+x[3] : s; }
+/** What a barcode says: a radio label (product code + serial), a serial, or an asset tag. */
+function parseCode(text){
+  var raw=String(text==null?"":text).replace(/\u241D|<GS>/gi,"\x1d").replace(/\u241E|<RS>/gi,"\x1e").replace(/\u2404|<EOT>/gi,"\x04");
+  var flat=raw.replace(/[\x00-\x1f]/g,"").trim(), up=flat.toUpperCase(), m;
+  var out={raw:raw,flat:flat,serial:"",code:"",model:"",asset:""};
+  if(/[\x1d\x1e\x04]/.test(raw)){
+    raw.split(/[\x1d\x1e\x04]/).forEach(function(f){ f=f.replace(/[\x00-\x1f]/g,"").trim().toUpperCase();
+      if((m=f.match(/^1P(\d{6})/))) out.code=out.code||m[1];
+      else if((m=f.match(/^S([A-Z0-9]{8,14})$/))) out.serial=out.serial||m[1]; });
+  }
+  if(!out.serial&&(m=up.match(/1P(\d{6})[A-Z]?\.?\d*S([A-Z0-9]{11})/))){ out.code=m[1]; out.serial=m[2]; }
+  if(!out.serial&&!out.code){
+    var c=up.replace(/^\(S\)/,"").replace(/[^A-Z0-9]/g,"");
+    if(/^1P\d{6}/.test(c)) out.code=c.slice(2,8);
+    else if(/^TM[A-Z0-9]{6,10}$/.test(c)) out.asset=c;
+    else if(/^S[A-Z0-9]{11}$/.test(c)) out.serial=c.slice(1);
+    else if(/^[A-Z0-9]{11}$/.test(c)) out.serial=c;
+  }
+  if(out.code) out.model=LOOKUP[out.code]||"";
+  return out;
+}
+function parseScan(v){ var p=parseCode(v); return p.serial? {model:p.model,sn:p.serial,code:p.code,raw:p.flat} : null; }
+function toDate(v){ if(!v) return null; var d=new Date(v); return isNaN(d)?null:d; }
+function fmtDate(d){ return d? d.toLocaleDateString(undefined,{month:"short",day:"numeric"}) : "No date"; }
+function ago(t){ if(!t) return ""; var s=Math.max(0,Math.round((Date.now()-t)/1000)); if(s<60) return "just now"; var m=Math.round(s/60); if(m<60) return m+" min ago"; var h=Math.round(m/60); return h<24? h+" hr ago" : Math.round(h/24)+" days ago"; }
+function hidx(h,names){ for(var i=0;i<names.length;i++){ var j=h.indexOf(names[i]); if(j>=0) return j; } return -1; }
+var toastTimer;
+function toast(msg){ var h=document.getElementById("toastHost"); h.innerHTML='<div class="toast" role="status">'+esc(msg)+'</div>'; clearTimeout(toastTimer); toastTimer=setTimeout(function(){h.innerHTML="";},3000); }
+function run(fn){ var args=[].slice.call(arguments,1);
+  if(window.google&&google.script&&google.script.run) return new Promise(function(res,rej){ var r=google.script.run.withSuccessHandler(function(x){ try{res(typeof x==="string"?JSON.parse(x):x);}catch(e){res(x);} }).withFailureHandler(rej); r[fn].apply(r,args); });
+  var api=String(window.RTT_API||"").trim();
+  if(!/^https:\/\/script\.google\.com\/.+\/exec$/.test(api)) return Promise.reject(new Error(location.protocol==="https:"||location.protocol==="http:"?"NO_API":"NO_SCRIPT"));
+  return fetch(api,{method:"POST",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify({fn:fn,args:args}),redirect:"follow"})
+    .then(function(r){ if(!r.ok) throw new Error("HTTP_"+r.status); return r.text(); })
+    .then(function(t){ var o; try{ o=JSON.parse(t); }catch(e){ throw new Error("NOT_PUBLIC"); }
+      if(!o||!o.ok) throw new Error(o&&o.error||"SERVER"); var x=o.val; try{ return typeof x==="string"?JSON.parse(x):x; }catch(e){ return x; } });
+}
+function errText(e){
+  var m=String(e&&e.message||e||"");
+  var after=function(k){ return m.split(k)[1].split(/["\n]/)[0]; };
+  if(m.indexOf("MANAGERS_ONLY")>=0) return "Only managers can do that.";
+  if(m.indexOf("NOT_ON_TEAM")>=0) return "That email isn't on the team list. Ask a manager to add you on the Team tab.";
+  if(m.indexOf("BAD_EMAIL")>=0) return "Enter your full work email.";
+  if(m.indexOf("WAIT")>=0&&m.indexOf("lock")<0) return "A code was just sent. Wait a minute before asking for another.";
+  if(m.indexOf("CODE_EXPIRED")>=0) return "That code expired. Ask for a new one.";
+  if(m.indexOf("BAD_CODE")>=0) return "That code isn't right. Check the email and try again.";
+  if(m.indexOf("TOO_MANY")>=0) return "Too many tries. Ask for a new code.";
+  if(/too many times for one day: email/i.test(m)) return "The app hit Google's daily email limit. Try again tomorrow.";
+  if(m.indexOf("IN_OTHER_MARKET:")>=0){ var o=after("IN_OTHER_MARKET:"); return "That radio is listed in "+o+" inventory. Switch to "+o+" at the top to move it."; }
+  if(m.indexOf("ALREADY_THERE:")>=0) return "That radio is already at "+title(after("ALREADY_THERE:"))+".";
+  if(m.indexOf("NOT_IN_INVENTORY")>=0) return "That radio isn't in inventory. Bring it in with Asset Transfer on the Inventory tab first.";
+  if(m.indexOf("ALREADY_INSTALLED:")>=0) return "That radio is already installed at "+after("ALREADY_INSTALLED:")+".";
+  if(m.indexOf("NOT_GOOD")>=0) return "That radio is marked bad. Pick a good spare.";
+  if(m.indexOf("NO_TRUCK")>=0) return "You don't have a truck on the Team tab. Ask a manager to add it.";
+  if(m.indexOf("NOT_FOUND")>=0) return "That row moved in the sheet. Refresh and try again.";
+  if(m.indexOf("BAD_SERIAL")>=0) return "Serials use only letters and numbers.";
+  if(m.indexOf("NO_TAB:")>=0) return "The sheet is missing the \""+after("NO_TAB:")+"\" tab. Run setupTabs again.";
+  if(m.indexOf("MISSING:")>=0) return "A required field is empty.";
+  if(m.indexOf("AUTH")>=0) return "Please sign in again.";
+  if(m.indexOf("Lock")>=0||m.indexOf("lock")>=0) return "Someone else is saving right now. Try again in a few seconds.";
+  if(m.indexOf("NO_API")>=0) return "This app isn't linked to the sheet yet. Add the web app link to config.js.";
+  if(m.indexOf("NOT_PUBLIC")>=0) return "The sheet link isn't open to everyone. In Apps Script set Who has access to Anyone, then deploy a new version.";
+  if(m.indexOf("NO_SCRIPT")>=0) return "Open this page from the web app link.";
+  return "Couldn't reach the sheet. Check your signal and try again.";
+}
+function isAuthErr(e){ return /\bAUTH\b/.test(String(e&&e.message||e||"")); }
+function nameOf(email){ var e=S(email).toLowerCase(); if(team[e]) return team[e].name; if(e.indexOf("@")>0) return title(e.split("@")[0].replace(/[._]+/g," ").replace(/\d+/g,"").trim()); return S(email); }
+function myTruck(){ if(!user) return ""; return H(user.truck)||(user.name?H(user.name.split(/\s+/)[0])+" TRUCK":""); }
+
+/* ---------- parse the sheet ---------- */
+function build(r){
+  LOOKUP={}; (r.lookup||[]).slice(1).forEach(function(x){ var c=S(x[0]).replace(/\.0+$/,""), m=S(x[1]); if(c&&m) LOOKUP[c]=m; });
+  var out={models:(r.models&&r.models.length?r.models:DEFAULT_MODELS),locations:r.locations||{}};
+  Object.keys(MARKETS).forEach(function(m){ out[m]=buildMarket(m,r.markets[m]||{}); });
+  return out;
+}
+function buildMarket(m,t){
+  var res={inv:null,tags:[]};
+  if(t.inv&&t.inv.length){
+    var h=t.inv[0].map(H), c={st:hidx(h,["STATUS"]),md:hidx(h,["RADIO"]),nt:hidx(h,["NOTES"]),loc:hidx(h,["LOCATION"]),sn:hidx(h,["SERIAL NUMBER"]),scan:hidx(h,["SCANNED SN"]),as:hidx(h,["ASSET NUMBER"]),sas:hidx(h,["SCANNED ASSET"]),by:hidx(h,["LAST MOVED BY"]),at:hidx(h,["LAST MOVED"]),ds:hidx(h,["DATE OF SCAN"])};
+    res.inv=t.inv.slice(1).map(function(x,i){
+      var scan=parseScan(x[c.scan]); var sn=SN(x[c.sn])||(scan&&scan.sn)||""; if(!sn) return null;
+      var loc=H(x[c.loc]), note=S(x[c.nt]);
+      return {row:i+2,status:H(x[c.st])||"GOOD",model:H(x[c.md])||(scan&&scan.model)||"UNKNOWN",loc:loc&&loc!=="???"?loc:"NO LOCATION",sn:sn,asset:SN(x[c.as])||SN(x[c.sas]),
+        site:loc==="SITE"&&note?note.toUpperCase():(/^[A-Z]{2}\d|^A\d[A-Z]/i.test(note)?note.toUpperCase():""),
+        by:c.by>=0?S(x[c.by]):"", at:toDate(c.at>=0?x[c.at]:"")||toDate(c.ds>=0?x[c.ds]:"")};
+    }).filter(Boolean);
+  }
+  if(t.tags&&t.tags.length){
+    var g=t.tags[0].map(H);
+    var k={ts:hidx(g,["TIMESTAMP"]),md:hidx(g,["RADIO"]),site:hidx(g,["SITE ID"]),inc:hidx(g,["INC #","INC # / TT NUMBER"]),bad:hidx(g,["SERIAL NUMBER OR ASSET IF NO SN","SERIAL NUMBER"]),rs:hidx(g,["FAILURE REASON"]),st:hidx(g,["STATUS"]),
+      p1:hidx(g,["SERIAL NUMBER PICTURE OR ASSET IF NO SN","SERIAL NUMBER PICTURE"]),p3:hidx(g,["ASSET NUMBER PICTURE"]),by:hidx(g,["EMAIL ADDRESS"]),nw:hidx(g,["NEW RADIO SN INSTALLED"]),p2:hidx(g,["NEW RADIO SN INSTALLED PICTURE"]),
+      nt:g.findIndex(function(x){return x.indexOf("ALARM NOTES")===0;}), as:hidx(g,["ASSET NUMBER"])};
+    var bad=t.bad||[], bh=(bad[0]||[]).map(H), bsn=hidx(bh,["SERIAL NUMBER"]), box=hidx(bh,["CHAT ORDER SUBMITTED?"]);
+    var used={};
+    res.tags=t.tags.slice(1).map(function(x,i){
+      var d=toDate(x[k.ts]), b=SN(x[k.bad]), site=S(x[k.site]);
+      if(!d||!b||!site||site.toLowerCase()==="test") return null;
+      var row=i+2, ordered=null;
+      if(box>=0&&bad[row-1]&&SN(bad[row-1][bsn])===b){ ordered=bad[row-1][box]===true; used[row]=1; }
+      else if(box>=0){ for(var j=1;j<bad.length;j++){ if(!used[j+1]&&SN(bad[j][bsn])===b){ ordered=bad[j][box]===true; used[j+1]=1; break; } } }
+      var inc=S(x[k.inc]).toUpperCase().replace(/_+$/,"");
+      var photos=[[x[k.p1],"Pulled radio"],[x[k.p2],"New radio"],[x[k.p3],"Asset tag"]].filter(function(p){return /^https:\/\//.test(S(p[0]));}).map(function(p){return {url:S(p[0]),label:p[1]};});
+      return {row:row,date:d,siteRaw:site,site:normSite(site,m),model:H(x[k.md]),ticket:/^\d+$/.test(inc)?"INC"+inc:inc,badSn:b,reason:S(x[k.rs]),notes:k.nt>=0?S(x[k.nt]):"",
+        by:nameOf(x[k.by]),newSn:SN(x[k.nw]),asset:k.as>=0?SN(x[k.as]):"",photos:photos,ordered:ordered};
+    }).filter(Boolean).sort(function(a,b){return b.date-a.date;});
+  }
+  return res;
+}
+
+/* ---------- checks ---------- */
+function isSpare(r){ return r.status==="GOOD"&&NOT_SPARE.indexOf(r.loc)<0; }
+function flags(m){
+  var inv=data[m].inv, tg=data[m].tags, out=[], bySn={};
+  (inv||[]).forEach(function(r){ bySn[r.sn]=r; });
+  var open=tg.filter(function(t){return t.ordered===false;});
+  if(open.length){ var o=open[open.length-1]; out.push({crit:true,title:open.length+(open.length>1?" swaps still need":" swap still needs")+" a replacement order",detail:"Oldest is "+o.site+" from "+fmtDate(o.date)+(isMgr?". Tap Mark order submitted on the Red tags tab once it's in.":". A manager marks it submitted once it's ordered.")}); }
+  var missing=tg.filter(function(t){return t.ordered===null;});
+  if(missing.length) out.push({crit:false,title:missing.length+" red tag"+(missing.length>1?"s aren't":" isn't")+" on the Bad Radios list",detail:missing.slice(0,4).map(function(t){return t.badSn+" at "+t.site;}).join(", ")});
+  var g={}; tg.forEach(function(t){ var v=t.badSn; if(v&&v.length>=8&&!/^(N\/?A|NONE)$/.test(v)) (g[v]=g[v]||[]).push(t); });
+  Object.keys(g).filter(function(k){return g[k].length>1;}).forEach(function(sn){ var sites=[]; g[sn].forEach(function(t){ if(sites.indexOf(t.site)<0) sites.push(t.site); }); out.push({crit:false,title:"Bad radio "+sn+" tagged "+g[sn].length+" times",detail:"At "+sites.join(", ")+". Probably a duplicate entry."}); });
+  if(inv){
+    var pg=tg.filter(function(t){return bySn[t.badSn]&&(isSpare(bySn[t.badSn])||bySn[t.badSn].loc==="SITE");});
+    if(pg.length) out.push({crit:true,title:pg.length+" pulled radio"+(pg.length>1?"s are":" is")+" still listed as good",detail:pg.map(function(t){return t.badSn+" (pulled from "+t.site+", listed at "+title(bySn[t.badSn].loc)+")";}).join("; ")+(isMgr?". Move them to Tellworks on the Inventory tab.":". A manager can move them to Tellworks.")});
+    var dup={}; inv.forEach(function(r){ dup[r.sn]=(dup[r.sn]||0)+1; }); var dups=Object.keys(dup).filter(function(k){return dup[k]>1;});
+    if(dups.length) out.push({crit:true,title:dups.length+" serial"+(dups.length>1?"s are":" is")+" listed more than once",detail:dups.slice(0,5).join(", ")+". Delete the extra row in the sheet."});
+    var nl=inv.filter(function(r){return r.loc==="NO LOCATION";}); if(nl.length) out.push({crit:false,title:nl.length+" radio"+(nl.length>1?"s have":" has")+" no location",detail:nl.slice(0,5).map(function(r){return r.sn;}).join(", ")+(nl.length>5?"…":"")+". Scan them with Asset Transfer to set one."});
+    var models=[]; inv.forEach(function(r){ if(r.model!=="UNKNOWN"&&models.indexOf(r.model)<0) models.push(r.model); });
+    models.forEach(function(md){ var c=inv.filter(function(r){return r.model===md&&isSpare(r);}).length; if(c<2) out.push({crit:c===0,title:md+": "+(c===0?"no spares":"only 1 spare")+" on hand",detail:"Restock before the next swap."}); });
+  }
+  return out.sort(function(a,b){return b.crit-a.crit;});
+}
+function locsFor(m){
+  var list=[], add=function(l){ l=H(l); if(l&&l!=="???"&&list.indexOf(l)<0) list.push(l); };
+  add(MARKETS[m].store); (data.locations[m]||[]).forEach(add); (data[m].inv||[]).forEach(function(r){ add(r.loc); }); add("SITE"); add("TELLWORKS");
+  var rank=function(x){ return x===MARKETS[m].store?0:(x.indexOf("WAREHOUSE")>=0||x.indexOf("STORAGE")>=0)?1:x==="SITE"?3:x==="TELLWORKS"?4:x==="NO LOCATION"?9:2; };
+  return list.sort(function(a,b){ return rank(a)-rank(b)||a.localeCompare(b); });
+}
+
+/* ---------- loading ---------- */
+function signedOut(msg){ token=""; store.set("rtt-token",""); user=null; isMgr=false; data=null; signStep="email"; state={phase:"signin",msg:msg||""}; render(); }
+function load(quiet){
+  if(!token){ signedOut(); return Promise.resolve(); }
+  if(loading) return Promise.resolve(); loading=true;
+  if(!quiet&&!data){ state={phase:"loading",msg:""}; render(); }
+  return run("getData",token).then(function(r){
+    raw=r; user=r.user; isMgr=user&&user.role==="MANAGER"; team={}; (r.team||[]).forEach(function(p){ team[S(p.email).toLowerCase()]=p; });
+    if(r.book){ var sm=document.querySelector(".brand small"); if(sm) sm.textContent="Serracom · "+(user?user.name+" · ":"")+r.book; }
+    data=build(r); lastLoad=Date.now(); state={phase:"ready",msg:""}; loading=false; onData();
+    if(!zxWarm){ zxWarm=true; setTimeout(function(){ loadZW().catch(function(){}); },2500); }
+  }).catch(function(e){ loading=false;
+    if(isAuthErr(e)){ signedOut("You've been signed out. Sign in again to continue."); return; }
+    if(data){ state={phase:"ready",msg:errText(e)}; onData(); } else { state={phase:"error",msg:errText(e)}; render(); } });
+}
+setInterval(function(){ if(document.visibilityState==="visible"&&state.phase==="ready"&&Date.now()-lastLoad>90000) load(true); },15000);
+document.addEventListener("visibilitychange",function(){ if(document.visibilityState==="visible"&&state.phase==="ready"&&Date.now()-lastLoad>30000) load(true); });
+
+/* ---------- views ---------- */
+function plural(n,w){ return n+' '+w+(n===1?'':'s'); }
+var app=document.getElementById("app");
+function liveLine(){
+  return '<div class="live" id="liveLine"><span class="dot'+(state.msg?" stale":"")+'"></span><span id="agoTxt">'+(state.msg?"Couldn't refresh · showing data from ":"Live from the sheet · updated ")+esc(ago(lastLoad))+'</span><button class="ghost" type="button" id="refreshBtn">Refresh</button></div>'+(state.msg?'<div class="banner">'+esc(state.msg)+'</div>':"");
+}
+setInterval(function(){ var a=document.getElementById("agoTxt"); if(a) a.textContent=(state.msg?"Couldn't refresh · showing data from ":"Live from the sheet · updated ")+ago(lastLoad); },30000);
+function chrome(){ var on=!!user&&state.phase!=="signin"; document.querySelector("nav.tabs").hidden=!on; document.getElementById("mktSwitch").hidden=!on; }
+function render(){
+  updateBadge(); chrome();
+  if(state.phase==="signin"){ viewSignIn(); return; }
+  if(state.phase==="loading"){ app.innerHTML='<div class="state"><h2>Loading the sheet</h2><p>Getting inventory, installs and red tags.</p><div class="skel"></div><div class="skel s"></div><div class="skel"></div></div>'; return; }
+  if(state.phase==="error"){ app.innerHTML='<div class="state err"><h2>Couldn\'t load the sheet</h2><p>'+esc(state.msg)+'</p><div class="actions"><button class="btn" type="button" id="retryBtn">Try again</button></div></div>'; document.getElementById("retryBtn").onclick=function(){load();}; return; }
+  VIEWS[curView]();
+  wireRefresh();
+}
+function wireRefresh(){ var rb=document.getElementById("refreshBtn"); if(rb) rb.onclick=function(){ toast("Refreshing…"); load(true).then(function(){ if(!state.msg) toast("Up to date"); }); }; }
+function refreshLive(){ var l=document.getElementById("liveLine"); if(!l) return; var b=l.nextElementSibling; if(b&&b.classList.contains("banner")) b.parentNode.removeChild(b); var tmp=document.createElement("div"); tmp.innerHTML=liveLine(); while(tmp.lastChild) l.parentNode.insertBefore(tmp.lastChild,l.nextSibling); l.parentNode.removeChild(l); wireRefresh(); }
+function updateBadge(){ var b=document.getElementById("openBadge"); var n=data? data[cur].tags.filter(function(t){return t.ordered===false;}).length : 0; b.hidden=!n; b.textContent=n; }
+/** New data arrived: refresh lists without wiping a form someone is filling in. */
+function onData(){ updateBadge(); chrome();
+  if(curView==="inventory"&&document.getElementById("xfForm")){ drawInv(); drawCheck(); refreshLive(); return; }
+  if(curView==="install"&&document.getElementById("inForm")){ drawInstalled(); refreshLive(); return; }
+  if(curView==="tags"&&document.getElementById("logForm")){ drawTags(); refreshLive(); return; }
+  render(); }
+
+/* sign-in */
+function viewSignIn(){
+  var msg=state.msg?'<div class="banner">'+esc(state.msg)+'</div>':'';
+  if(signStep==="email"){
+    app.innerHTML=msg+'<form class="state signin" id="siForm" novalidate><h2>Sign in</h2><p>Enter your Serracom email. We\'ll email you a 6-digit code. You only do this once on each phone.</p>'+
+      '<label for="siEmail">Work email</label><input id="siEmail" type="email" inputmode="email" autocomplete="email" autocapitalize="off" spellcheck="false" placeholder="name@serracom.com" value="'+esc(signEmail)+'">'+
+      '<span class="hint err" id="siErr"></span><button class="btn red" type="submit" id="siBtn">Email me a code</button></form>';
+    document.getElementById("siForm").addEventListener("submit",function(e){ e.preventDefault();
+      var em=S(document.getElementById("siEmail").value).toLowerCase(), er=document.getElementById("siErr"), btn=document.getElementById("siBtn");
+      if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(em)){ er.textContent="Enter your full work email."; return; }
+      btn.disabled=true; btn.textContent="Sending…"; er.textContent="";
+      run("requestCode",em).then(function(){ signEmail=em; store.set("rtt-email",em); signStep="code"; state.msg=""; render(); })
+        .catch(function(err){ er.textContent=errText(err); btn.disabled=false; btn.textContent="Email me a code"; if(/WAIT/.test(String(err&&err.message))){ signEmail=em; signStep="code"; render(); } });
+    });
+  } else {
+    app.innerHTML=msg+'<form class="state signin" id="siForm" novalidate><h2>Check your email</h2><p>We sent a code to <b>'+esc(signEmail)+'</b>. It can take a minute, and it may land in Junk.</p>'+
+      '<label for="siCode">6-digit code</label><input id="siCode" class="mono codein" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="123456">'+
+      '<span class="hint err" id="siErr"></span><button class="btn red" type="submit" id="siBtn">Sign in</button>'+
+      '<div class="actions"><button class="linkbtn" type="button" id="siResend">Send a new code</button><button class="linkbtn" type="button" id="siBack">Use a different email</button></div></form>';
+    var codeIn=document.getElementById("siCode"); codeIn.focus();
+    document.getElementById("siBack").onclick=function(){ signStep="email"; render(); };
+    document.getElementById("siResend").onclick=function(){ var er=document.getElementById("siErr"); run("requestCode",signEmail).then(function(){ toast("New code sent"); }).catch(function(err){ er.textContent=errText(err); }); };
+    document.getElementById("siForm").addEventListener("submit",function(e){ e.preventDefault();
+      var c=S(codeIn.value).replace(/\D/g,""), er=document.getElementById("siErr"), btn=document.getElementById("siBtn");
+      if(c.length!==6){ er.textContent="Enter the 6 digits from the email."; return; }
+      btn.disabled=true; btn.textContent="Signing in…";
+      run("verifyCode",signEmail,c).then(function(r){ token=r.token; store.set("rtt-token",token); user=r.user; isMgr=user.role==="MANAGER"; if(user.market&&MARKETS[user.market]){ cur=user.market; store.set("rtt-market",cur); paintMarket(); }
+          state={phase:"loading",msg:""}; go("dashboard"); load(); })
+        .catch(function(err){ er.textContent=errText(err); btn.disabled=false; btn.textContent="Sign in"; if(/CODE_EXPIRED|TOO_MANY/.test(String(err&&err.message))) codeIn.value=""; });
+    });
+  }
+}
+
+/* overview */
+function viewDashboard(){
+  var d=data[cur], inv=d.inv, tg=d.tags, fl=flags(cur), now=new Date();
+  var thisMonth=tg.filter(function(t){return t.date.getFullYear()===now.getFullYear()&&t.date.getMonth()===now.getMonth();}).length;
+  var open=tg.filter(function(t){return t.ordered===false;}).length, spares=inv?inv.filter(isSpare).length:null, installed=inv?inv.filter(function(r){return r.loc==="SITE";}).length:0;
+  var table="";
+  if(inv&&inv.length){
+    var locs=locsFor(cur).filter(function(l){ return NOT_SPARE.indexOf(l)<0&&inv.some(function(r){return r.loc===l&&isSpare(r);}); });
+    var models=[]; inv.forEach(function(r){ if(isSpare(r)&&models.indexOf(r.model)<0) models.push(r.model); }); models.sort();
+    if(locs.length) table='<section><div class="sec-h"><h2>Spares by location</h2><p>Good radios not at a site or Tellworks</p></div><div class="tbl-wrap"><table><thead><tr><th>Model</th>'+locs.map(function(l){return '<th>'+esc(title(l))+'</th>';}).join("")+'<th>Total</th></tr></thead><tbody>'+
+      models.map(function(md){ var c=locs.map(function(l){return inv.filter(function(r){return r.model===md&&r.loc===l&&isSpare(r);}).length;}); var tot=c.reduce(function(a,b){return a+b;},0); return '<tr><td><span class="model">'+esc(md)+'</span></td>'+c.map(function(x){return '<td>'+x+'</td>';}).join("")+'<td class="'+(tot<2?"low":"")+'">'+tot+(tot<2?'<span class="lowtag">LOW</span>':"")+'</td></tr>'; }).join("")+'</tbody></table></div></section>';
+  }
+  var rc={}; tg.forEach(function(t){ var k=(t.reason||"No reason given").replace(/\s*[\/·]\s*BAD OUT THE BOX$/i,"").replace(/\s+/g," ").trim(), key=k.toLowerCase(); rc[key]=rc[key]||{label:k,n:0}; rc[key].n++; });
+  var rs=Object.keys(rc).map(function(k){return rc[k];}).sort(function(a,b){return b.n-a.n;}).slice(0,8);
+  app.innerHTML=liveLine()+
+  '<section><div class="sec-h"><h2>'+esc(MARKETS[cur].name)+'</h2><p>'+plural(inv?inv.length:0,'radio')+' · '+plural(tg.length,'red tag')+'</p></div><div class="stats">'+
+    '<div class="stat'+(open?" hot":"")+'"><span class="v">'+open+'</span><span class="l">Orders not submitted</span></div>'+
+    '<div class="stat"><span class="v">'+(spares==null?"–":spares)+'</span><span class="l">Good spares on hand</span></div>'+
+    '<div class="stat"><span class="v">'+installed+'</span><span class="l">Installed at sites</span></div>'+
+    '<div class="stat"><span class="v">'+thisMonth+'</span><span class="l">Red tags this month</span></div></div></section>'+
+  '<section><div class="sec-h"><h2>Needs attention</h2><p>Checked against inventory and red tags</p></div><div class="flags">'+
+    (fl.length? fl.map(function(f){return '<div class="flag'+(f.crit?" crit":"")+'"><i></i><div><strong>'+esc(f.title)+'</strong><span>'+esc(f.detail)+'</span></div></div>';}).join("") : '<div class="allclear">Nothing needs attention right now.</div>')+'</div></section>'+
+  table+
+  '<section><div class="sec-h"><h2>Why radios failed</h2><p>Top reasons</p></div>'+barList(rs)+'</section>'+
+  accountPanel();
+  wireAccount();
+}
+function barList(rs){ if(!rs.length) return '<div class="bars"><span class="note">No red tags yet.</span></div>'; var max=rs[0].n;
+  return '<div class="bars">'+rs.map(function(r){return '<div class="bar"><span class="n">'+esc(r.label)+'</span><span class="c">'+r.n+'</span><div class="track"><div class="fill" style="width:'+(r.n/max*100).toFixed(1)+'%"></div></div></div>';}).join("")+'</div>'; }
+function accountPanel(){
+  if(!user) return '';
+  var t=myTruck();
+  return '<section><div class="sec-h"><h2>Your account</h2><p>'+esc(user.email)+'</p></div><div class="acct"><div><b>'+esc(user.name)+'</b><span>'+(isMgr?"Manager":"Lead")+' · '+(MARKETS[user.market]?esc(user.market):'AU and HN')+(t?' · '+esc(title(t)):'')+'</span></div><button class="btn quiet sm" type="button" id="signOutBtn">Sign out</button></div></section>';
+}
+function wireAccount(){ var b=document.getElementById("signOutBtn"); if(b) b.onclick=function(){ var t=token; signedOut(); run("signOut",t).catch(function(){}); }; }
+
+/* inventory + asset transfer */
+var invFilter="All", invQuery="";
+function viewInventory(){
+  var inv=data[cur].inv, locs=locsFor(cur), truck=myTruck();
+  if(invFilter!=="All"&&locs.indexOf(invFilter)<0) invFilter="All";
+  app.innerHTML=liveLine()+
+  '<section><div class="sec-h"><h2>Asset Transfer</h2><p>Pick up a radio or move it to your truck</p></div><form id="xfForm" novalidate><div class="f2">'+
+    scanField("xfSn","Radio serial","serial",false)+
+    '<label>Radio<select id="xfModel"><option value="">Choose radio</option>'+data.models.map(function(m){return '<option>'+esc(m)+'</option>';}).join("")+'</select><span class="hint" id="xfModelHint">Filled in from the scan</span></label>'+
+    scanField("xfAsset","T-Mobile asset tag","asset",true)+
+    '<fieldset class="dest"><legend>Move it to</legend><div class="seg">'+
+      '<label><input type="radio" name="xfDest" value="TRUCK"'+(truck?' checked':' disabled')+'><span>My truck<small>'+(truck?esc(title(truck)):'No truck on the Team tab')+'</small></span></label>'+
+      '<label><input type="radio" name="xfDest" value="SHOP"'+(truck?'':' checked')+'><span>Shop<small>'+esc(title(MARKETS[cur].store))+'</small></span></label>'+
+    '</div></fieldset>'+
+  '</div><div id="xfErr" class="formerr" hidden></div><div class="actions"><button class="btn red" type="submit" id="xfBtn">Transfer</button></div></form></section>'+
+  (inv?'<section><div class="sec-h"><h2>'+esc(MARKETS[cur].name)+' inventory</h2><p id="invCount"></p></div><div class="controls"><div class="srow"><input class="search mono" id="invSearch" type="text" placeholder="Search or check a serial, asset or site" aria-label="Search or check a radio" value="'+esc(invQuery)+'" autocomplete="off" autocapitalize="characters">'+scanButton("invSearch","any")+'</div><div id="chkOut"></div><div class="chips" id="invChips"></div></div><div class="list" id="invList"></div></section>'
+     :'<section><div class="state"><h2>No '+esc(MARKETS[cur].name)+' inventory yet</h2><p>Scan the first radio in with Asset Transfer above.</p></div></section>');
+  wireScan(app);
+  scanHooks.invSearch=function(r){ var s=document.getElementById("invSearch"); s.value=r.value; invQuery=r.value; invFilter="All"; drawInv(); drawCheck(); };
+  if(inv){ drawInv(); drawCheck();
+    var s=document.getElementById("invSearch"); s.addEventListener("input",function(){ var p=parseScan(s.value); if(p) s.value=p.sn; invQuery=s.value; drawInv(); drawCheck(); });
+    document.getElementById("invChips").addEventListener("click",function(e){ var b=e.target.closest(".chip"); if(!b) return; invFilter=b.dataset.f; drawInv(); });
+    document.getElementById("invList").addEventListener("change",onMove); }
+  var scanRaw="", errBox=document.getElementById("xfErr");
+  var describe=function(){ var sn=SN(document.getElementById("xfSn").value), h=document.getElementById("xfSnHint"); if(!sn||!h) return;
+    var hit=findRadio(sn);
+    if(!hit){ h.className="hint ok"; h.textContent="New radio. It will be added to inventory."; return; }
+    if(hit.m!==cur){ h.className="hint err"; h.textContent="Listed in "+hit.m+" inventory. Switch to "+hit.m+" at the top to move it."; return; }
+    if(hit.r.model&&hit.r.model!=="UNKNOWN") document.getElementById("xfModel").value=hit.r.model;
+    h.className="hint ok"; h.textContent="Now at "+title(hit.r.loc)+(hit.r.site?" ("+hit.r.site+")":"")+(hit.r.status!=="GOOD"?" · marked "+title(hit.r.status).toLowerCase():""); };
+  scanHooks.xfSn=function(r){ scanRaw=r.raw||""; if(r.model) document.getElementById("xfModel").value=r.model; describe(); };
+  scanHooks["xfSn:mode"]=function(){ scanRaw=""; };
+  document.getElementById("xfSn").addEventListener("input",describe);
+  document.getElementById("xfForm").addEventListener("submit",function(e){ e.preventDefault();
+    var sf=fieldVal("xfSn","serial number"), af=fieldVal("xfAsset","asset tag"), v=sf.value, m=document.getElementById("xfModel").value, a=af.value;
+    var dest=(document.querySelector('input[name="xfDest"]:checked')||{}).value||"SHOP", destName=dest==="TRUCK"?truck:MARKETS[cur].store;
+    var bad=function(msg){ errBox.hidden=false; errBox.textContent=msg; errBox.scrollIntoView({block:"center",behavior:"smooth"}); };
+    errBox.hidden=true;
+    if(!v) return bad("Scan the radio's serial number."); if(sf.error) return bad(sf.error); if(af.error) return bad(af.error);
+    if(!/^[A-Z0-9]{6,20}$/.test(v)) return bad("Serials use only letters and numbers.");
+    var hit=findRadio(v);
+    if(hit&&hit.m!==cur) return bad(v+" is listed in "+hit.m+" inventory. Switch to "+hit.m+" at the top to move it.");
+    if(hit&&hit.r.loc===destName) return bad(v+" is already at "+title(destName)+".");
+    if(!hit&&!m) return bad("Choose the radio model.");
+    var btn=document.getElementById("xfBtn"); btn.disabled=true; btn.textContent="Saving…";
+    run("transferRadio",token,cur,{sn:v,model:m,asset:a,dest:dest,scan:scanRaw}).then(function(r){
+      toast(r.action==="added"? v+" added to "+title(r.to) : v+" moved from "+title(r.from)+" to "+title(r.to)); return load(true).then(function(){ render(); }); })
+      .catch(function(err){ if(isAuthErr(err)) return signedOut("Sign in again to continue."); bad(errText(err)); btn.disabled=false; btn.textContent="Transfer"; }); });
+}
+function findRadio(sn){ var hit=null; Object.keys(MARKETS).forEach(function(m){ (data[m].inv||[]).forEach(function(r){ if(!hit&&r.sn===sn) hit={m:m,r:r}; }); }); return hit; }
+function movedLine(r){ return (r.by||r.at)? ' · '+(r.by?nameOf(r.by)+', ':'')+(r.at?fmtDate(r.at):'') : ''; }
+function drawInv(){
+  var inv=data[cur].inv; if(!inv||!document.getElementById("invList")) return; var locs=locsFor(cur), q=SN(invQuery);
+  document.getElementById("invChips").innerHTML=["All"].concat(locs.filter(function(l){return inv.some(function(r){return r.loc===l;});})).map(function(f){ var n=f==="All"?inv.length:inv.filter(function(r){return r.loc===f;}).length; return '<button type="button" class="chip" data-f="'+esc(f)+'" aria-pressed="'+(f===invFilter)+'">'+esc(f==="All"?"All":title(f))+' '+n+'</button>'; }).join("");
+  var list=inv.filter(function(r){ return (invFilter==="All"||r.loc===invFilter)&&(!q||r.sn.indexOf(q)>=0||(r.asset||"").indexOf(q)>=0||(r.site||"").indexOf(q)>=0); }).sort(function(a,b){return a.model.localeCompare(b.model)||a.sn.localeCompare(b.sn);});
+  document.getElementById("invCount").textContent=list.length+" of "+inv.length+" radios";
+  document.getElementById("invList").innerHTML=list.length? list.map(function(r){
+    var pill=r.status==="GOOD"?'<span class="pill good">Good</span>':'<span class="pill bad">'+esc(title(r.status))+'</span>';
+    return '<div class="row"><div class="main"><span class="model">'+esc(r.model)+'</span><span class="mono">'+esc(r.sn)+'</span>'+pill+'</div>'+
+      '<div class="sub"><span>'+esc(title(r.loc))+(r.site?" · "+esc(r.site):"")+esc(movedLine(r))+'</span>'+(r.asset&&r.asset!=="NA"?'<span class="mono">'+esc(r.asset)+'</span>':"")+'</div>'+
+      (!isMgr?'':'<select class="move" data-sn="'+esc(r.sn)+'" data-row="'+r.row+'" aria-label="Move '+esc(r.sn)+'">'+(r.loc==="NO LOCATION"?'<option value="" selected>No location</option>':"")+locs.filter(function(l){return l!=="NO LOCATION";}).map(function(l){return '<option value="'+esc(l)+'"'+(l===r.loc?" selected":"")+'>'+esc(title(l))+'</option>';}).join("")+
+      '<option value="__status">'+(r.status==="GOOD"?"Mark bad":"Mark good")+'</option></select>')+'</div>'; }).join("") : !inv.length?'<div class="empty">No radios yet. Scan one in with Asset Transfer above.</div>' : (q.length>=5?'':'<div class="empty">No radios match. Clear the search or pick another location.</div>');
+}
+function onMove(e){
+  var sel=e.target.closest("select.move"); if(!sel) return;
+  var r=(data[cur].inv||[]).filter(function(x){return x.sn===sel.dataset.sn;})[0]; if(!r) return;
+  var v=sel.value, loc="", site="", status="";
+  if(v==="__status") status=r.status==="GOOD"?"BAD OUT THE BOX":"GOOD";
+  else { loc=v; if(v==="SITE") site=r.site||""; }
+  if(!loc&&!status) return;
+  sel.disabled=true;
+  run("moveRadio",token,cur,r.row,r.sn,loc,site,status).then(function(){ toast(status? r.sn+" marked "+title(status).toLowerCase() : r.sn+" moved to "+title(loc)); return load(true); })
+    .catch(function(err){ if(isAuthErr(err)) return signedOut("Sign in again to continue."); toast(errText(err)); sel.disabled=false; drawInv(); });
+}
+/** Search box doubles as "check a radio": where it is, in either market, and its red tag history. */
+function drawCheck(){
+  var out=document.getElementById("chkOut"); if(!out) return;
+  var q=SN(invQuery), p=parseScan(invQuery); if(p) q=p.sn;
+  if(q.length<5){ out.innerHTML=""; return; }
+  var hits=[], verdict=null;
+  Object.keys(MARKETS).forEach(function(m){ var d=data[m], mn=MARKETS[m].name;
+    (d.inv||[]).filter(function(r){return r.sn===q||r.asset===q;}).forEach(function(r){ hits.push(mn+" inventory: "+r.model+", "+title(r.status).toLowerCase()+", "+title(r.loc)+(r.site?" ("+r.site+")":"")+movedLine(r)); if(!verdict) verdict= r.loc==="SITE"?["bad","Installed"+(r.site?" at "+r.site:"")] : isSpare(r)?["ok","Good spare · "+mn+" "+title(r.loc)] : ["warn",title(r.status)+" · "+title(r.loc)]; });
+    d.tags.filter(function(t){return t.newSn===q;}).forEach(function(t){ hits.push("Installed at "+t.site+" on "+fmtDate(t.date)+" ("+mn+")"); if(!verdict) verdict=["bad","Installed at "+t.site]; });
+    d.tags.filter(function(t){return t.badSn===q;}).forEach(function(t){ hits.push("Pulled as bad from "+t.site+" on "+fmtDate(t.date)+": "+(t.reason||"no reason")+" ("+mn+")"); if(!verdict||verdict[0]!=="bad") verdict=["bad","Logged as a bad radio"]; });
+  });
+  out.innerHTML= hits.length? '<div class="check-out"><div class="verdict '+verdict[0]+'">'+esc(verdict[1])+'</div><ul class="hits">'+hits.map(function(h){return '<li>'+esc(h)+'</li>';}).join("")+'</ul></div>'
+    : '<div class="check-out"><div class="verdict warn">Not found</div><p class="note">'+esc(q)+' isn\'t in either market\'s inventory or any red tag. Scan it in with Asset Transfer above.</p></div>';
+}
+
+/* install */
+var instQuery="";
+function viewInstall(){
+  app.innerHTML=liveLine()+
+  '<section><div class="sec-h"><h2>Install · '+esc(MARKETS[cur].name)+'</h2><p>Moves a spare from inventory to a site</p></div><form id="inForm" novalidate><div class="f2">'+
+    scanField("inSn","Radio serial","serial",false)+
+    '<label>Site ID<input id="inSite" type="text" class="mono" placeholder="'+MARKETS[cur].sitePh+'" autocomplete="off" autocapitalize="characters"><span class="hint" id="inSiteHint"></span></label>'+
+  '</div><div id="inErr" class="formerr" hidden></div><div class="actions"><button class="btn red" type="submit" id="inBtn">Install</button></div></form></section>'+
+  '<section id="instSec"></section>';
+  wireScan(app);
+  var $=function(id){return document.getElementById(id);};
+  var check=function(){ var sn=SN($("inSn").value), h=$("inSnHint"); if(!sn) return;
+    var hit=findRadio(sn);
+    if(!hit){ h.className="hint err"; h.textContent="Not in inventory. Bring it in with Asset Transfer first."; }
+    else if(hit.m!==cur){ h.className="hint err"; h.textContent="Listed in "+hit.m+" inventory. Switch to "+hit.m+" at the top."; }
+    else if(hit.r.loc==="SITE"){ h.className="hint err"; h.textContent="Already installed"+(hit.r.site?" at "+hit.r.site:"")+"."; }
+    else if(hit.r.status!=="GOOD"){ h.className="hint err"; h.textContent="Marked bad. Pick a good spare."; }
+    else { h.className="hint ok"; h.textContent=hit.r.model+" · from "+title(hit.r.loc); } };
+  scanHooks.inSn=function(){ check(); };
+  $("inSn").addEventListener("input",check);
+  $("inSite").addEventListener("input",function(){ var raw=S($("inSite").value).toUpperCase(), n=normSite(raw,cur); $("inSiteHint").textContent= n&&n!==raw? "Saved as "+n : ""; });
+  $("inForm").addEventListener("submit",function(e){ e.preventDefault();
+    var err=$("inErr"), show=function(m){ err.hidden=false; err.textContent=m; err.scrollIntoView({block:"center",behavior:"smooth"}); };
+    var sf=fieldVal("inSn","serial number"), sn=sf.value, site=normSite($("inSite").value,cur);
+    err.hidden=true;
+    if(!sn) return show("Scan the radio you're installing."); if(sf.error) return show(sf.error);
+    if(!site) return show("Add the site ID.");
+    var hit=findRadio(sn);
+    if(!hit) return show(sn+" isn't in inventory. Bring it in with Asset Transfer on the Inventory tab first.");
+    if(hit.m!==cur) return show(sn+" is listed in "+hit.m+" inventory. Switch to "+hit.m+" at the top.");
+    if(hit.r.loc==="SITE") return show(sn+" is already installed"+(hit.r.site?" at "+hit.r.site:"")+".");
+    if(hit.r.status!=="GOOD") return show(sn+" is marked bad. Pick a good spare.");
+    var btn=$("inBtn"); btn.disabled=true; btn.textContent="Saving…";
+    run("installRadio",token,cur,{sn:sn,site:site}).then(function(){ toast(sn+" installed at "+site); return load(true).then(function(){ render(); }); })
+      .catch(function(e2){ if(isAuthErr(e2)) return signedOut("Sign in again to continue."); show(errText(e2)); btn.disabled=false; btn.textContent="Install"; });
+  });
+  drawInstalled();
+  $("instSec").addEventListener("input",function(e){ if(e.target.id!=="instQ") return; instQuery=e.target.value; drawInstalledList(); });
+}
+function drawInstalled(){
+  var sec=document.getElementById("instSec"); if(!sec) return;
+  var focused=document.activeElement&&document.activeElement.id==="instQ";
+  var n=(data[cur].inv||[]).filter(function(r){return r.loc==="SITE";}).length;
+  sec.innerHTML='<div class="sec-h"><h2>Installed at sites</h2><p>'+n+' radio'+(n===1?'':'s')+'</p></div>'+
+    '<input class="search mono" id="instQ" type="text" placeholder="Search site or serial" aria-label="Search installs" value="'+esc(instQuery)+'" autocomplete="off" autocapitalize="characters">'+
+    '<div class="list" id="instList"></div>';
+  drawInstalledList();
+  if(focused){ var q=document.getElementById("instQ"); q.focus(); q.setSelectionRange(q.value.length,q.value.length); }
+}
+function drawInstalledList(){
+  var el=document.getElementById("instList"); if(!el) return; var q=SN(instQuery);
+  var list=(data[cur].inv||[]).filter(function(r){ return r.loc==="SITE"&&(!q||r.sn.indexOf(q)>=0||(r.site||"").indexOf(q)>=0||(r.asset||"").indexOf(q)>=0); })
+    .sort(function(a,b){ return (b.at?b.at.getTime():0)-(a.at?a.at.getTime():0); });
+  el.innerHTML=list.length? list.map(function(r){
+    return '<div class="row inst"><div class="main"><span class="site-id">'+esc(r.site||"No site")+'</span><span class="model">'+esc(r.model)+'</span><span class="mono">'+esc(r.sn)+'</span></div>'+
+      '<div class="sub"><span>'+(r.at?'Installed '+fmtDate(r.at):'Install date not recorded')+(r.by?' by '+esc(nameOf(r.by)):'')+'</span>'+(r.asset&&r.asset!=="NA"?'<span class="mono">'+esc(r.asset)+'</span>':'')+'</div></div>'; }).join("")
+    : '<div class="empty">'+(q?'No installs match.':'Nothing installed yet. Installs show up here.')+'</div>';
+}
+
+/* red tags */
+var tagFilter="open";
+function viewTags(){
+  photos={};
+  app.innerHTML=liveLine()+logFormHtml()+'<section id="tagSec"></section>';
+  wireLogForm();
+  drawTags();
+  document.getElementById("tagSec").addEventListener("click",function(e){
+    var ch=e.target.closest(".chip"); if(ch){ tagFilter=ch.dataset.f; drawTags(); return; }
+    var o=e.target.closest("[data-order]"); if(!o) return;
+    var t=data[cur].tags.filter(function(x){return String(x.row)===o.dataset.order;})[0]; if(!t) return; var val=o.dataset.val==="1"; o.disabled=true; o.textContent="Saving…";
+    run("setOrdered",token,cur,t.row,t.badSn,val).then(function(){ toast(val?"Order marked submitted for "+t.site:t.site+" moved back to open"); return load(true); })
+      .catch(function(err){ if(isAuthErr(err)) return signedOut("Sign in again to continue."); toast(errText(err)); o.disabled=false; o.textContent=val?"Mark order submitted":"Undo"; });
+  });
+}
+function drawTags(){
+  var sec=document.getElementById("tagSec"); if(!sec) return;
+  var tg=data[cur].tags, open=tg.filter(function(t){return t.ordered===false;}).length;
+  if(!open&&tagFilter==="open") tagFilter="all";
+  var list=tg.filter(function(t){return tagFilter==="all"||t.ordered===false;});
+  sec.innerHTML='<div class="sec-h"><h2>'+esc(MARKETS[cur].name)+' red tags</h2><p>'+plural(tg.length,'tag')+'</p></div>'+
+    '<div class="chips" id="tagChips"><button type="button" class="chip" data-f="open" aria-pressed="'+(tagFilter==="open")+'">Order not submitted ('+open+')</button><button type="button" class="chip" data-f="all" aria-pressed="'+(tagFilter==="all")+'">All red tags</button></div>'+
+    '<div class="tags" id="tagList">'+(list.length? list.map(tagCard).join("") : '<div class="empty">'+(tg.length?'Every red tag has its replacement order in.':'No red tags yet. Log the first one above.')+'</div>')+'</div>'+
+    (isMgr?'':'<p class="note">Managers mark orders submitted.</p>');
+}
+function tagCard(t){
+  var ph=t.photos.map(function(p){return '<a href="'+esc(p.url)+'" target="_blank" rel="noopener">'+esc(p.label)+' photo</a>';}).join("");
+  var status=t.ordered===true?'<span class="pill good">Order submitted</span>'+(isMgr?'<button class="btn quiet sm" type="button" data-order="'+t.row+'" data-val="0">Undo</button>':'')
+    : t.ordered===false?'<span class="pill bad">Order not submitted</span>'+(isMgr?'<button class="btn red sm" type="button" data-order="'+t.row+'" data-val="1">Mark order submitted</button>':'')
+    : '<span class="pill warn">Not on Bad Radios list</span>';
+  return '<article class="tag'+(t.ordered?" done":"")+'"><div class="t1"><span class="site">'+esc(t.site)+'</span>'+(t.model?'<span class="model">'+esc(t.model)+'</span>':"")+'<span class="date">'+fmtDate(t.date)+(t.by?" · "+esc(t.by):"")+'</span></div>'+
+    '<dl><dt>Pulled</dt><dd class="mono">'+esc(t.badSn)+'</dd>'+(t.newSn?'<dt>Installed</dt><dd class="mono">'+esc(t.newSn)+'</dd>':'')+(t.asset&&t.asset!=="NA"?'<dt>Asset</dt><dd class="mono">'+esc(t.asset)+'</dd>':'')+
+    '<dt>Reason</dt><dd>'+esc(t.reason||"Not given")+(t.notes&&t.notes.toLowerCase()!==t.reason.toLowerCase()?" · "+esc(t.notes):"")+'</dd><dt>Ticket</dt><dd class="mono">'+esc(t.ticket||"None")+'</dd></dl>'+
+    '<div class="t3">'+status+ph+'</div></article>';
+}
+
+/* ---------- slanted 1D barcodes (e.g. pink T-Mobile asset tags, Code 128) ---------- */
+// Finds striped regions and their angle, then reads Code 128 along many lines through them.
+var C128="212222 222122 222221 121223 121322 131222 122213 122312 132212 221213 221312 231212 112232 122132 122231 113222 123122 123221 223211 221132 221231 213212 223112 312131 311222 321122 321221 312212 322112 322211 212123 212321 232121 111323 131123 131321 112313 132113 132311 211313 231113 231311 112133 112331 132131 113123 113321 133121 313121 211331 231131 213113 213311 213131 311123 311321 331121 312113 312311 332111 314111 221411 431111 111224 111422 121124 121421 141122 141221 112214 112412 122114 122411 142112 142211 241211 221114 413111 241112 134111 111242 121142 121241 114212 124112 124211 411212 421112 421211 212141 214121 412121 111143 111341 131141 114113 114311 411113 411311 113141 114131 311141 411131 211412 211214 211232 2331112".split(" ").map(function(p){ return p.split("").map(Number); });
+function c128Match(runs,i,n,from,to){
+  var sum=0, k; for(k=0;k<n;k++) sum+=runs[i+k];
+  var unit=sum/(n===7?13:11), best=-1, bestV=1e9;
+  for(var v=from;v<=to;v++){ var p=C128[v]; if(p.length!==n) continue; var tot=0, ok=true;
+    for(k=0;k<n;k++){ var d=Math.abs(runs[i+k]/unit-p[k]); if(d>0.8){ ok=false; break; } tot+=d; }
+    if(ok&&tot/(n===7?13:11)<bestV){ bestV=tot/(n===7?13:11); best=v; } }
+  return bestV<=0.35? best : -1;
+}
+function c128Text(start,vals){
+  var set=start===103?"A":start===104?"B":"C", out="", shift=false;
+  for(var i=0;i<vals.length;i++){ var v=vals[i], s=shift?(set==="A"?"B":"A"):set; shift=false;
+    if(s==="C"){ if(v<100) out+=(v<10?"0":"")+v; else if(v===100) set="B"; else if(v===101) set="A"; continue; }
+    if(v<64||(s==="B"&&v<96)) { out+=s==="A"&&v>=64? String.fromCharCode(v-64) : String.fromCharCode(v+32); continue; }
+    if(s==="A"&&v<96){ out+=String.fromCharCode(v-64); continue; }
+    if(v===98) shift=true; else if(v===99) set="C"; else if(v===100) set=s==="A"?"B":set; else if(v===101) set=s==="B"?"A":set;
+  }
+  return out;
+}
+/** runs: widths alternating dark/light, first one dark. Returns text or null. */
+function c128Decode(runs){
+  for(var i=0;i+6<=runs.length;i+=2){
+    var st=c128Match(runs,i,6,103,105); if(st<0) continue;
+    var vals=[], j=i+6, ok=false;
+    while(j+6<=runs.length&&vals.length<80){
+      if(j+7<=runs.length&&c128Match(runs,j,7,106,106)===106){ ok=true; break; }
+      var v=c128Match(runs,j,6,0,102); if(v<0) break; vals.push(v); j+=6;
+    }
+    if(!ok||vals.length<2) continue;
+    var cs=vals.pop(), sum=st; for(var k=0;k<vals.length;k++) sum+=(k+1)*vals[k];
+    if(sum%103!==cs) continue;
+    var t=c128Text(st,vals); if(t) return t;
+  }
+  return null;
+}
+function profileRuns(p,thr){
+  var cross=[], dark=[], n=p.length, i;
+  var first=-1; for(i=0;i<n;i++) if(p[i]===p[i]){ first=i; break; } if(first<0) return [];
+  var prev=p[first]<thr;
+  for(i=first+1;i<n;i++){ var cur=p[i]<thr; if(cur!==prev){ var a=p[i-1]-thr, b=p[i]-thr; cross.push(i-1+(a/(a-b))); dark.push(cur); prev=cur; } }
+  var runs=[]; for(i=0;i+1<cross.length;i++){ if(!runs.length&&!dark[i]) continue; runs.push(cross[i+1]-cross[i]); }
+  return runs;
+}
+/** Striped regions with their gradient angle (radians, image coords) and tile centres in full-res pixels. */
+function barRegions(lum,W,H){
+  var s=Math.min(1,800/Math.max(W,H)), w=Math.max(8,Math.round(W*s)), h=Math.max(8,Math.round(H*s)), sm=new Float32Array(w*h), x, y;
+  for(y=0;y<h;y++){ var y0=Math.floor(y/s), y1=Math.max(y0+1,Math.floor((y+1)/s)); for(x=0;x<w;x++){ var x0=Math.floor(x/s), x1=Math.max(x0+1,Math.floor((x+1)/s)), acc=0, c=0;
+    for(var yy=y0;yy<y1&&yy<H;yy+=Math.max(1,(y1-y0)>>1)) for(var xx=x0;xx<x1&&xx<W;xx+=Math.max(1,(x1-x0)>>1)){ acc+=lum[yy*W+xx]; c++; } sm[y*w+x]=c?acc/c:0; } }
+  var T=16, th=Math.floor(h/T), tw=Math.floor(w/T), j11=new Float32Array(th*tw), j22=new Float32Array(th*tw), j12=new Float32Array(th*tw);
+  for(y=1;y<h-1;y++) for(x=1;x<w-1;x++){ var ty=Math.floor(y/T), tx=Math.floor(x/T); if(ty>=th||tx>=tw) continue;
+    var o=y*w+x, gx=(sm[o+1]-sm[o-1])*2+(sm[o-w+1]-sm[o-w-1])+(sm[o+w+1]-sm[o+w-1]), gy=(sm[o+w]-sm[o-w])*2+(sm[o+w-1]-sm[o-w-1])+(sm[o+w+1]-sm[o-w+1]), t=ty*tw+tx;
+    j11[t]+=gx*gx; j22[t]+=gy*gy; j12[t]+=gx*gy; }
+  var en=[], tiles=[], k; for(k=0;k<th*tw;k++) en.push(j11[k]+j22[k]);
+  var sorted=en.slice().sort(function(a,b){return a-b;}), cut=sorted[Math.floor(sorted.length*0.8)]||0;
+  for(k=0;k<th*tw;k++){ var e=en[k]+1e-6, coh=Math.sqrt((j11[k]-j22[k])*(j11[k]-j22[k])+4*j12[k]*j12[k])/e;
+    if(coh>0.75&&en[k]>cut) tiles.push({x:((k%tw)+0.5)*T/s, y:(Math.floor(k/tw)+0.5)*T/s, a:0.5*Math.atan2(2*j12[k],j11[k]-j22[k]), e:en[k]}); }
+  var bins=new Float64Array(36); tiles.forEach(function(t){ bins[Math.floor(((t.a*180/Math.PI)+90)%180/5)%36]+=t.e; });
+  var order=[]; for(k=0;k<36;k++) order.push(k); order.sort(function(a,b){return bins[b]-bins[a];});
+  var peaks=[]; order.forEach(function(b){ if(bins[b]<=0||peaks.length>=3) return; if(peaks.some(function(p){ var d=Math.abs(p-b); return Math.min(d,36-d)<=2; })) return; peaks.push(b); });
+  var tile=T/s, out=[];
+  peaks.forEach(function(b){
+    var c=(b*5-90+2.5)*Math.PI/180, sel=tiles.filter(function(t){ var d=Math.abs(((t.a-c)%Math.PI+1.5*Math.PI)%Math.PI-Math.PI/2); return d<=7.5*Math.PI/180; });
+    if(sel.length<4) return;
+    var sx=0, sy=0; sel.forEach(function(t){ sx+=t.e*Math.cos(2*t.a); sy+=t.e*Math.sin(2*t.a); });
+    var left=sel.slice(), best=[];
+    while(left.length){ var comp=[left.pop()], st=[comp[0]];
+      while(st.length){ var q=st.pop(); for(var i=left.length-1;i>=0;i--){ if(Math.abs(left[i].x-q.x)<=2.5*tile&&Math.abs(left[i].y-q.y)<=2.5*tile){ var n=left.splice(i,1)[0]; comp.push(n); st.push(n); } } }
+      if(comp.length>best.length) best=comp; }
+    out.push({angle:0.5*Math.atan2(sy,sx), pts:best, tile:tile});
+  });
+  return out;
+}
+/** Reads Code 128 along lines through each striped region, at small angle offsets. Returns decoded texts, best first. */
+function readSlanted(lum,W,H){
+  var votes={}, done=false;
+  barRegions(lum,W,H).slice(0,2).forEach(function(g){
+    if(done) return;
+    var cx=0, cy=0; g.pts.forEach(function(p){ cx+=p.x; cy+=p.y; }); cx/=g.pts.length; cy/=g.pts.length;
+    var cu=Math.cos(g.angle), su=Math.sin(g.angle), us=[], vs=[];
+    g.pts.forEach(function(p){ us.push((p.x-cx)*cu+(p.y-cy)*su); vs.push(-(p.x-cx)*su+(p.y-cy)*cu); });
+    var umin=Math.min.apply(null,us)-g.tile, umax=Math.max.apply(null,us)+g.tile, len=umax-umin;
+    var vmin=Math.min.apply(null,vs)-g.tile/2, vmax=Math.max.apply(null,vs)+g.tile/2;
+    var a0=umin-0.7*len, a1=umax+0.7*len, N=Math.ceil(a1-a0);
+    [0,-1,1,-2,2,-3,3].forEach(function(dDeg){
+      if(done) return;
+      var ph=g.angle+dDeg*Math.PI/180, c=Math.cos(ph), s=Math.sin(ph);
+      for(var li=0;li<=10&&!done;li++){
+        var v=vmin+(vmax-vmin)*li/10, p=new Float32Array(N), lo=255, hi=0, vals=[];
+        for(var t=0;t<N;t++){ var u=a0+t, x=cx+u*c-v*s, y=cy+u*s+v*c;
+          if(x<0||y<0||x>=W-1||y>=H-1){ p[t]=NaN; continue; }
+          var xi=x|0, yi=y|0, fx=x-xi, fy=y-yi, o=yi*W+xi;
+          p[t]=(lum[o]*(1-fx)+lum[o+1]*fx)*(1-fy)+(lum[o+W]*(1-fx)+lum[o+W+1]*fx)*fy;
+          if(u>=umin&&u<=umax) vals.push(p[t]); }
+        if(vals.length<20) continue;
+        vals.sort(function(a,b){return a-b;}); lo=vals[Math.floor(vals.length*0.05)]; hi=vals[Math.floor(vals.length*0.95)];
+        if(hi-lo<20) continue;
+        [0.5,0.4,0.6].forEach(function(f){
+          var runs=profileRuns(p,lo+(hi-lo)*f), txt=c128Decode(runs);
+          if(!txt){ var r=[], i; for(i=runs.length-1;i>=0;i--) r.push(runs[i]); if(r.length%2===0) r.shift(); txt=c128Decode(r); }
+          if(txt&&!done){ votes[txt]=(votes[txt]||0)+1; if(votes[txt]>=3) done=true; }
+        });
+      }
+    });
+  });
+  readSlanted.lastVotes=votes;
+  return Object.keys(votes).sort(function(a,b){ return votes[b]-votes[a]; });
+}
+
+/* ---------- barcode scanning ---------- */
+// Live camera is blocked inside Apps Script pages, so scanning uses the phone's camera app:
+// the lead snaps the label and the page reads the barcodes from that photo.
+var ZX_URLS=["https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js","https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js","https://cdn.jsdelivr.net/npm/@zxing/library@0.20.0/umd/index.min.js"];
+var ZW_VER="3.1.5";
+var ZW_URLS=["https://cdn.jsdelivr.net/npm/zxing-wasm@"+ZW_VER+"/dist/iife/reader/index.js","https://unpkg.com/zxing-wasm@"+ZW_VER+"/dist/iife/reader/index.js"];
+var zxPromise=null, zwPromise=null, nativeDet=null, scanHooks={};
+function loadScripts(urls,ready){
+  return new Promise(function(res,rej){ var i=0;
+    (function next(){
+      if(ready()) return res();
+      if(i>=urls.length) return rej(new Error("SCANNER_LOAD"));
+      var s=document.createElement("script"); s.src=urls[i++]; s.async=true;
+      s.onload=function(){ if(ready()) res(); else next(); };
+      s.onerror=function(){ if(s.parentNode) s.parentNode.removeChild(s); next(); };
+      document.head.appendChild(s);
+    })();
+  });
+}
+/** zxing-cpp compiled to WebAssembly: reads tilted, angled Data Matrix labels that the older reader misses. */
+function loadZW(){
+  if(zwPromise) return zwPromise;
+  zwPromise=loadScripts(ZW_URLS,function(){ return !!(window.ZXingWASM&&window.ZXingWASM.readBarcodes); }).then(function(){
+    var Z=window.ZXingWASM;
+    return Promise.resolve().then(function(){ return Z.prepareZXingModule({fireImmediately:true}); }).catch(function(){
+      // the first copy of the .wasm file didn't load: try the other CDN (new settings, so the failure isn't reused)
+      return Z.prepareZXingModule({fireImmediately:true,overrides:{locateFile:function(path,prefix){ return /\.wasm$/.test(path)? "https://unpkg.com/zxing-wasm@"+ZW_VER+"/dist/reader/"+path : prefix+path; }}});
+    }).then(function(){ return Z; });
+  }).catch(function(e){ zwPromise=null; throw e; });
+  return zwPromise;
+}
+function boxH(s,d,w,h,r){ var k=1/(2*r+1); for(var y=0;y<h;y++){ var o=y*w, acc=0, x; for(x=-r;x<=r;x++) acc+=s[o+(x<0?0:x>=w?w-1:x)];
+  for(x=0;x<w;x++){ d[o+x]=acc*k; var ad=x+r+1, sb=x-r; acc+=s[o+(ad>=w?w-1:ad)]-s[o+(sb<0?0:sb)]; } } }
+function boxV(s,d,w,h,r){ var k=1/(2*r+1); for(var x=0;x<w;x++){ var acc=0, y; for(y=-r;y<=r;y++) acc+=s[(y<0?0:y>=h?h-1:y)*w+x];
+  for(y=0;y<h;y++){ d[y*w+x]=acc*k; var ad=y+r+1, sb=y-r; acc+=s[(ad>=h?h-1:ad)*w+x]-s[(sb<0?0:sb)*w+x]; } } }
+/** Stretch contrast (1% cut each end) and sharpen: rescues dark, faded and slightly blurry label photos. */
+function enhanceGray(y,w,h){
+  var n=w*h, hist=new Uint32Array(256), i, acc=0, lo=0, hi=255;
+  for(i=0;i<n;i++) hist[y[i]|0]++;
+  var cutoff=n*0.01;
+  while(lo<254&&acc+hist[lo]<=cutoff){ acc+=hist[lo]; lo++; }
+  acc=0; while(hi>lo+1&&acc+hist[hi]<=cutoff){ acc+=hist[hi]; hi--; }
+  var k=255/Math.max(1,hi-lo), a=new Float32Array(n);
+  for(i=0;i<n;i++){ var t=(y[i]-lo)*k; a[i]=t<0?0:t>255?255:t; }
+  var bl=a.slice(), tmp=new Float32Array(n);
+  for(var p=0;p<3;p++){ boxH(bl,tmp,w,h,3); boxV(tmp,bl,w,h,3); }
+  var out=new Uint8ClampedArray(n);
+  for(i=0;i<n;i++) out[i]=a[i]+2*(a[i]-bl[i]);
+  return out;
+}
+function cutData(img,x,y,w,h,max){ var c=cut(img,x,y,w,h,max,false); return c.getContext("2d").getImageData(0,0,c.width,c.height); }
+function enhanceData(id){
+  var d=id.data, n=id.width*id.height, y=new Float32Array(n), i, j;
+  for(i=0,j=0;i<n;i++,j+=4) y[i]=(d[j]*77+d[j+1]*150+d[j+2]*29)>>8;
+  var g=enhanceGray(y,id.width,id.height), out=new ImageData(id.width,id.height), o=out.data;
+  for(i=0,j=0;i<n;i++,j+=4){ o[j]=o[j+1]=o[j+2]=g[i]; o[j+3]=255; }
+  return out;
+}
+function zwRead(Z,id){
+  return Z.readBarcodes(id,{formats:["DataMatrix","QRCode","PDF417","Aztec","Code128","Code39","Code93"],tryHarder:true,tryRotate:true,tryInvert:false,tryDownscale:true,textMode:"Plain",maxNumberOfSymbols:8})
+    .then(function(rs){ return (rs||[]).filter(function(r){ return r&&r.text&&r.isValid!==false; }).map(function(r){ return {text:r.text}; }); });
+}
+var KIND_TXT={serial:"serial number",asset:"asset tag",any:"serial or asset tag"};
+function loadZX(){
+  if(window.ZXing&&window.ZXing.MultiFormatReader) return Promise.resolve(window.ZXing);
+  if(zxPromise) return zxPromise;
+  zxPromise=new Promise(function(res,rej){ var i=0;
+    (function next(){
+      if(i>=ZX_URLS.length){ zxPromise=null; rej(new Error("SCANNER_LOAD")); return; }
+      var s=document.createElement("script"); s.src=ZX_URLS[i++]; s.async=true;
+      s.onload=function(){ if(window.ZXing&&window.ZXing.MultiFormatReader) res(window.ZXing); else next(); };
+      s.onerror=function(){ if(s.parentNode) s.parentNode.removeChild(s); next(); };
+      document.head.appendChild(s);
+    })();
+  });
+  return zxPromise;
+}
+function getNative(){
+  if(nativeDet!==null) return Promise.resolve(nativeDet);
+  if(!("BarcodeDetector" in window)){ nativeDet=false; return Promise.resolve(false); }
+  return Promise.resolve().then(function(){ return window.BarcodeDetector.getSupportedFormats(); }).then(function(f){
+    var want=["data_matrix","qr_code","pdf417","aztec","code_128","code_39","code_93"].filter(function(x){ return f.indexOf(x)>=0; });
+    nativeDet=want.length? new window.BarcodeDetector({formats:want}) : false; return nativeDet;
+  }).catch(function(){ nativeDet=false; return false; });
+}
+function cut(img,x,y,w,h,max,rot){
+  var s=Math.min(1,max/Math.max(w,h)), cw=Math.max(1,Math.round(w*s)), ch=Math.max(1,Math.round(h*s)), c=document.createElement("canvas"), g;
+  if(rot){ c.width=ch; c.height=cw; g=c.getContext("2d"); g.translate(ch,0); g.rotate(Math.PI/2); }
+  else { c.width=cw; c.height=ch; g=c.getContext("2d"); }
+  g.drawImage(img,x,y,w,h,0,0,cw,ch); return c;
+}
+function zxRead(ZX,c,formats){
+  var out=[], src;
+  try{ var d=c.getContext("2d").getImageData(0,0,c.width,c.height).data, n=c.width*c.height, lum=new Uint8ClampedArray(n);
+    for(var i=0,j=0;i<n;i++,j+=4) lum[i]=(d[j]*77+d[j+1]*150+d[j+2]*29)>>8;
+    src=new ZX.RGBLuminanceSource(lum,c.width,c.height);
+  }catch(e){ try{ src=new ZX.HTMLCanvasElementLuminanceSource(c); }catch(e2){ return out; } }
+  var hints=new Map(); hints.set(ZX.DecodeHintType.POSSIBLE_FORMATS,formats.map(function(f){ return ZX.BarcodeFormat[f]; })); hints.set(ZX.DecodeHintType.TRY_HARDER,true);
+  var reader=new ZX.MultiFormatReader();
+  [ZX.HybridBinarizer,ZX.GlobalHistogramBinarizer].some(function(B){
+    try{ var r=reader.decode(new ZX.BinaryBitmap(new B(src)),hints); out.push({text:r.getText()}); return true; }catch(e){ return false; } });
+  return out;
+}
+function pickFrom(found,kind){
+  var serials=[], assets=[], model="", code="", raw="";
+  found.slice().sort(function(a,b){ return (b.code&&b.serial?1:0)-(a.code&&a.serial?1:0); }).forEach(function(p){
+    if(p.serial&&serials.indexOf(p.serial)<0) serials.push(p.serial);
+    if(p.serial&&p.code&&!raw) raw=p.flat;
+    if(p.code&&!code){ code=p.code; model=p.model; }
+    if(p.asset&&assets.indexOf(p.asset)<0) assets.push(p.asset);
+  });
+  var list= kind==="serial"? serials : kind==="asset"? assets : serials.concat(assets);
+  return {value:list[0]||"",choices:list,model:model,code:code,raw:raw};
+}
+function readBarcodes(file,kind){
+  var url=URL.createObjectURL(file);
+  return new Promise(function(res,rej){ var img=new Image(); img.onload=function(){ res(img); }; img.onerror=function(){ rej(new Error("READ")); }; img.src=url; })
+  .then(function(img){
+    var W=img.naturalWidth, H=img.naturalHeight, found=[], seen={}, zwFail=false, zxFail=false, nativeUsed=false;
+    var add=function(list){ (list||[]).forEach(function(x){ var t=x&&x.text; if(!t||seen[t]) return; seen[t]=1; found.push(parseCode(t)); }); };
+    var steps=[function(){ return getNative().then(function(det){ if(!det) return; nativeUsed=true;
+      return det.detect(cut(img,0,0,W,H,2400,false)).then(function(rs){ add(rs.map(function(r){ return {text:r.rawValue}; })); },function(){}); }); }];
+    var zw=function(fn){ return function(){ if(zwFail) return; return loadZW().then(function(Z){ return fn(Z); },function(){ zwFail=true; }); }; };
+    steps.push(zw(function(Z){ return zwRead(Z,cutData(img,0,0,W,H,2400)).then(add); }));
+    steps.push(zw(function(Z){ return zwRead(Z,enhanceData(cutData(img,0,0,W,H,2400))).then(add); }));
+    // pink T-Mobile asset tags: tilted Code 128 that washes out in grayscale, read with the slanted-line reader
+    if(kind!=="serial") steps.push(function(){ var id=cutData(img,0,0,W,H,2400), w=id.width, h=id.height, d=id.data, L=new Uint8Array(w*h);
+      for(var q=0,o=0;q<L.length;q++,o+=4){ L[q]=Math.max(d[o],d[o+1],d[o+2]); }
+      try{ add(readSlanted(L,w,h).map(function(t){ return {text:t}; })); }catch(e){} });
+    [[0,0,.6,.6],[.4,0,.6,.6],[0,.4,.6,.6],[.4,.4,.6,.6],[.2,.2,.6,.6]].forEach(function(t){
+      steps.push(zw(function(Z){ return zwRead(Z,enhanceData(cutData(img,t[0]*W,t[1]*H,t[2]*W,t[3]*H,1800))).then(add); }));
+    });
+    var firstTile=steps.length;
+    // older pure-JavaScript reader: only used if the WebAssembly reader can't load on this phone
+    var TWO=["DATA_MATRIX","QR_CODE","PDF_417","AZTEC"], ONE=["CODE_128","CODE_39","CODE_93"];
+    var zx=function(fn){ return function(){ if(!zwFail||zxFail) return; return loadZX().then(fn,function(){ zxFail=true; }); }; };
+    steps.push(zx(function(ZX){ add(zxRead(ZX,cut(img,0,0,W,H,1400,false),TWO)); }));
+    steps.push(zx(function(ZX){ add(zxRead(ZX,cut(img,0,0,W,H,2000,false),ONE)); }));
+    steps.push(zx(function(ZX){ add(zxRead(ZX,cut(img,0,0,W,H,2000,true),ONE)); }));
+    [[0,0,.55,.55],[.45,0,.55,.55],[0,.45,.55,.55],[.45,.45,.55,.55],[0,0,1,.4],[0,.3,1,.4],[0,.6,1,.4],[0,0,.4,1],[.3,0,.4,1],[.6,0,.4,1]].forEach(function(t){
+      steps.push(zx(function(ZX){ var x=t[0]*W, y=t[1]*H, w=t[2]*W, h=t[3]*H;
+        add(zxRead(ZX,cut(img,x,y,w,h,1600,false),TWO.concat(ONE)));
+        if(h>w) add(zxRead(ZX,cut(img,x,y,w,h,1600,true),ONE)); }));
+    });
+    var i=0;
+    return new Promise(function(res,rej){
+      (function next(){
+        var p=pickFrom(found,kind);
+        if((p.value&&(kind!=="serial"||p.model||i>=firstTile))||i>=steps.length){
+          if(!p.value&&zwFail&&zxFail&&!nativeUsed) return rej(new Error("SCANNER_LOAD"));
+          p.engine=!zwFail?"zxing-cpp":!zxFail?"zxing-js (backup)":nativeUsed?"phone only":"none";
+          try{ p.photo=cut(img,0,0,W,H,1600,false).toDataURL("image/jpeg",.82).split(",")[1]; }catch(e){ p.photo=""; }
+          return res(p);
+        }
+        var step=steps[i++];
+        setTimeout(function(){ Promise.resolve().then(step).catch(function(){}).then(next); },0);
+      })();
+    });
+  }).then(function(r){ URL.revokeObjectURL(url); return r; },function(e){ URL.revokeObjectURL(url); throw e; });
+}
+function scanOverlay(html){
+  var o=document.getElementById("scanOv");
+  if(!o){ o=document.createElement("div"); o.id="scanOv"; o.className="scan-ov"; o.setAttribute("role","dialog"); o.setAttribute("aria-modal","true"); o.setAttribute("aria-live","polite"); document.body.appendChild(o); }
+  o.innerHTML='<div class="scan-card">'+html+'</div>'; return o;
+}
+function closeScan(){ stopLive(); var o=document.getElementById("scanOv"); if(o&&o.parentNode) o.parentNode.removeChild(o); }
+document.addEventListener("keydown",function(e){ if(e.key==="Escape") closeScan(); });
+function startPhoto(kind,cb){
+  [].forEach.call(document.querySelectorAll("input.scan-file"),function(x){ if(x.parentNode) x.parentNode.removeChild(x); });
+  var inp=document.createElement("input"); inp.type="file"; inp.accept="image/*"; inp.setAttribute("capture","environment"); inp.className="scan-file"; inp.hidden=true; document.body.appendChild(inp);
+  inp.addEventListener("change",function(){
+    var f=inp.files&&inp.files[0]; if(inp.parentNode) inp.parentNode.removeChild(inp); if(!f) return;
+    scanOverlay('<h3>Reading the barcode</h3><div class="skel"></div><div class="skel s"></div><p class="note">This takes a few seconds.</p>');
+    readBarcodes(f,kind).then(function(r){
+      if(!r.value) return scanFail(kind,cb,"No "+KIND_TXT[kind]+" barcode found in that photo.",r.engine);
+      if(r.choices.length>1) return scanChoose(kind,cb,r);
+      closeScan(); cb(r);
+    }).catch(function(e){ scanFail(kind,cb, e&&e.message==="SCANNER_LOAD"? "The scanner couldn't load. Check your signal and try again." : "That photo couldn't be opened. Try again."); });
+  });
+  inp.click();
+}
+function scanFail(kind,cb,msg,engine){
+  var o=scanOverlay('<h3>Couldn\'t read it</h3><p>'+esc(msg)+'</p><p class="note">Move in so the white label fills the photo, hold still until it\'s sharp, and tilt to avoid glare.</p>'+(engine?'<p class="note">Reader: '+esc(engine)+'</p>':'')+'<div class="actions"><button class="btn red" type="button" data-act="again">Retake photo</button><button class="btn quiet" type="button" data-act="cancel">Cancel</button></div>');
+  o.querySelector('[data-act="again"]').onclick=function(){ startPhoto(kind,cb); };
+  o.querySelector('[data-act="cancel"]').onclick=closeScan;
+  o.querySelector('[data-act="again"]').focus();
+}
+function scanChoose(kind,cb,r){
+  var o=scanOverlay('<h3>Which one?</h3><p>That photo has more than one '+esc(KIND_TXT[kind])+'. Tap the one you meant.</p><div class="choices">'+r.choices.map(function(v,i){ return '<button class="btn quiet mono" type="button" data-i="'+i+'">'+esc(v)+'</button>'; }).join("")+'</div><div class="actions"><button class="btn quiet" type="button" data-act="again">Try again</button><button class="btn quiet" type="button" data-act="cancel">Cancel</button></div>');
+  [].forEach.call(o.querySelectorAll("[data-i]"),function(b){ b.onclick=function(){ var i=+b.dataset.i, out={}; for(var k in r) out[k]=r[k]; out.value=r.choices[i]; if(i>0){ out.model=""; out.code=""; out.raw=""; } closeScan(); cb(out); }; });
+  o.querySelector('[data-act="again"]').onclick=function(){ startScan(kind,cb); };
+  o.querySelector('[data-act="cancel"]').onclick=closeScan;
+}
+var CAM='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 8h3l2-3h8l2 3h3v11H3z"/><circle cx="12" cy="13" r="3.5"/></svg>';
+function scanButton(id,kind){ return '<button type="button" class="btn sm scanbtn" data-scan="'+id+'" data-kind="'+kind+'">'+CAM+'Scan</button>'; }
+/** A field that only fills from a scan, with a typed fallback that must be entered twice. */
+function scanField(id,label,kind,optional){
+  var link=kind==="asset"?"Tag won't scan? Type it":"Label won't scan? Type it";
+  return '<div class="sfield"><label class="slabel" for="'+id+'">'+esc(label)+'</label>'+
+    '<div class="srow"><input id="'+id+'" type="text" class="mono" readonly data-mode="scan" data-opt="'+(optional?1:0)+'" placeholder="Tap Scan" autocomplete="off" autocapitalize="characters" spellcheck="false">'+scanButton(id,kind)+'</div>'+
+    '<input id="'+id+'2" type="text" class="mono" placeholder="Type it again to confirm" aria-label="Confirm '+esc(label)+'" autocomplete="off" autocapitalize="characters" spellcheck="false" hidden>'+
+    '<span class="hint" id="'+id+'Hint">'+(optional?"Optional":"")+'</span>'+
+    '<button type="button" class="linkbtn" data-type="'+id+'" data-label="'+esc(link)+'">'+esc(link)+'</button></div>';
+}
+function setScanned(id,r){
+  var el=document.getElementById(id), c2=document.getElementById(id+"2"), h=document.getElementById(id+"Hint"), b=document.querySelector('[data-type="'+id+'"]');
+  if(!el) return;
+  el.dataset.mode="scan"; el.readOnly=true; el.value=r.value; el.placeholder="Tap Scan";
+  if(c2){ c2.value=""; c2.hidden=true; } if(b) b.textContent=b.dataset.label;
+  if(h){ h.className="hint ok"; h.textContent="Scanned"+(r.model?" · "+r.model:""); }
+}
+function resetField(id){
+  var el=document.getElementById(id), c2=document.getElementById(id+"2"), h=document.getElementById(id+"Hint"), b=document.querySelector('[data-type="'+id+'"]');
+  el.dataset.mode="scan"; el.readOnly=true; el.value=""; el.placeholder="Tap Scan";
+  if(c2){ c2.value=""; c2.hidden=true; } if(b) b.textContent=b.dataset.label;
+  if(h){ h.className="hint"; h.textContent=el.dataset.opt==="1"?"Optional":""; }
+}
+function fieldVal(id,label){
+  var el=document.getElementById(id); if(!el) return {value:""};
+  var v=SN(el.value);
+  if(el.dataset.mode==="typed"&&v){
+    var v2=SN(document.getElementById(id+"2").value);
+    if(v!==v2) return {value:v,typed:true,error:"The two "+label+" entries don't match. Type it again carefully, or scan the label."};
+    return {value:v,typed:true};
+  }
+  return {value:v,typed:false};
+}
+function wireScan(root){
+  [].forEach.call(root.querySelectorAll("[data-scan]"),function(b){ b.addEventListener("click",function(){
+    var id=b.dataset.scan;
+    startScan(b.dataset.kind,function(r){ var el=document.getElementById(id); if(!el) return; if(el.dataset.mode) setScanned(id,r); if(scanHooks[id]) scanHooks[id](r); });
+  }); });
+  [].forEach.call(root.querySelectorAll("[data-type]"),function(b){ b.addEventListener("click",function(){
+    var id=b.dataset.type, el=document.getElementById(id), c2=document.getElementById(id+"2"), h=document.getElementById(id+"Hint");
+    if(el.dataset.mode==="scan"){
+      el.dataset.mode="typed"; el.readOnly=false; el.value=""; el.placeholder="Type it exactly as printed"; c2.value=""; c2.hidden=false;
+      b.textContent="Scan instead"; h.className="hint"; h.textContent="Typed entries are flagged in the notes."; el.focus();
+    } else resetField(id);
+    if(scanHooks[id+":mode"]) scanHooks[id+":mode"]();
+  }); });
+  [].forEach.call(root.querySelectorAll("input[data-mode]"),function(el){ el.addEventListener("input",function(){
+    if(el.dataset.mode!=="typed") return;
+    var p=parseCode(el.value);   // a Bluetooth scanner or pasted label scan counts as scanned
+    if(p.serial&&p.code){ var r={value:p.serial,model:p.model,code:p.code,raw:p.flat,choices:[p.serial]}; setScanned(el.id,r); if(scanHooks[el.id]) scanHooks[el.id](r); }
+  }); });
+}
+var zxWarm=false;
+
+/* ---------- live camera scanning (home-screen app only) ---------- */
+// Google blocks the camera inside its own pages, so there the app falls back to snapping a photo.
+var LIVE_OK=!!(window.isSecureContext&&navigator.mediaDevices&&navigator.mediaDevices.getUserMedia)&&!(window.google&&google.script&&google.script.run);
+var live=null;
+function startScan(kind,cb){ return LIVE_OK? startLive(kind,cb) : startPhoto(kind,cb); }
+function stopLive(){
+  if(!live) return; var L=live; live=null; L.stop=true; clearTimeout(L.t);
+  if(L.stream) L.stream.getTracks().forEach(function(t){ try{ t.stop(); }catch(e){} });
+}
+document.addEventListener("visibilitychange",function(){ if(document.visibilityState==="hidden"&&live){ stopLive(); closeScan(); } });
+function liveFallback(kind,cb,msg){
+  var o=scanOverlay('<h3>Camera not available</h3><p>'+esc(msg)+'</p><div class="actions"><button class="btn red" type="button" data-act="photo">Take a photo instead</button><button class="btn quiet" type="button" data-act="cancel">Cancel</button></div>');
+  o.querySelector('[data-act="photo"]').onclick=function(){ startPhoto(kind,cb); };
+  o.querySelector('[data-act="cancel"]').onclick=closeScan;
+}
+function startLive(kind,cb){
+  stopLive();
+  var o=scanOverlay('<h3>Scan the '+esc(KIND_TXT[kind])+'</h3>'+
+    '<div class="viewfinder"><video id="scanVid" playsinline muted autoplay></video><div class="aim" aria-hidden="true"></div></div>'+
+    '<p class="note" id="liveMsg">Starting the camera…</p>'+
+    '<div class="actions"><button class="btn quiet sm" type="button" data-act="torch" hidden>Light on</button><button class="btn quiet" type="button" data-act="photo">Take a photo instead</button><button class="btn quiet" type="button" data-act="cancel">Cancel</button></div>');
+  o.classList.add("live");
+  var L=live={stop:false,found:[],seen:{},n:0,first:0,torch:false};
+  var msg=function(t){ var m=document.getElementById("liveMsg"); if(m) m.textContent=t; };
+  o.querySelector('[data-act="cancel"]').onclick=function(){ stopLive(); closeScan(); };
+  o.querySelector('[data-act="photo"]').onclick=function(){ stopLive(); startPhoto(kind,cb); };
+  navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:"environment"},width:{ideal:1920},height:{ideal:1080}}}).then(function(stream){
+    if(L.stop){ stream.getTracks().forEach(function(t){ t.stop(); }); return; }
+    L.stream=stream;
+    var v=document.getElementById("scanVid"); v.srcObject=stream;
+    var track=stream.getVideoTracks()[0], caps={}; try{ caps=track.getCapabilities? track.getCapabilities() : {}; }catch(e){}
+    if(caps.torch){ var tb=o.querySelector('[data-act="torch"]'); tb.hidden=false;
+      tb.onclick=function(){ L.torch=!L.torch; track.applyConstraints({advanced:[{torch:L.torch}]}).catch(function(){}); tb.textContent=L.torch?"Light off":"Light on"; }; }
+    if(caps.focusMode&&caps.focusMode.indexOf("continuous")>=0) track.applyConstraints({advanced:[{focusMode:"continuous"}]}).catch(function(){});
+    return Promise.resolve(v.play()).catch(function(){}).then(function(){
+      msg(kind==="asset"?"Hold the pink tag inside the box.":"Hold the label inside the box. Get close enough that it's sharp.");
+      loadZW().catch(function(){}); getNative();
+      tick();
+    });
+  }).catch(function(e){
+    if(L.stop) return; stopLive();
+    var denied=e&&(e.name==="NotAllowedError"||e.name==="SecurityError");
+    liveFallback(kind,cb, denied? "Camera access is off for this app. Allow it in Settings, or take a photo instead." : "This phone's camera couldn't start. Take a photo instead.");
+  });
+  var cv=document.createElement("canvas"), g=cv.getContext("2d",{willReadFrequently:true});
+  function add(list){ (list||[]).forEach(function(x){ var t=x&&x.text; if(!t||L.seen[t]) return; L.seen[t]=1; L.found.push(parseCode(t)); if(!L.first) L.first=Date.now(); }); }
+  function finish(){
+    var p=pickFrom(L.found,kind);
+    try{ var pc=document.createElement("canvas"), v=document.getElementById("scanVid"), s=Math.min(1,1600/Math.max(v.videoWidth,v.videoHeight));
+      pc.width=Math.round(v.videoWidth*s); pc.height=Math.round(v.videoHeight*s); pc.getContext("2d").drawImage(v,0,0,pc.width,pc.height);
+      p.photo=pc.toDataURL("image/jpeg",.82).split(",")[1]; }catch(e){ p.photo=""; }
+    p.engine="live";
+    stopLive();
+    if(p.choices.length>1) return scanChoose(kind,cb,p);
+    closeScan(); cb(p);
+  }
+  function tick(){
+    if(L.stop) return;
+    var v=document.getElementById("scanVid");
+    if(!v||v.readyState<2||!v.videoWidth){ L.t=setTimeout(tick,120); return; }
+    // read the whole frame (cropping can cut the bars the slanted reader needs to find the tag)
+    var vw=v.videoWidth, vh=v.videoHeight, s=Math.min(1,1600/Math.max(vw,vh));
+    cv.width=Math.round(vw*s); cv.height=Math.round(vh*s);
+    g.drawImage(v,0,0,vw,vh,0,0,cv.width,cv.height);
+    var id=g.getImageData(0,0,cv.width,cv.height); L.n++;
+    var jobs=[];
+    if(nativeDet) jobs.push(function(){ return nativeDet.detect(cv).then(function(rs){ add(rs.map(function(r){ return {text:r.rawValue}; })); },function(){}); });
+    if(zwPromise) jobs.push(function(){ return zwPromise.then(function(Z){ return zwRead(Z,id).then(add); }).catch(function(){}); });
+    if(kind!=="serial"&&L.n%2===0) jobs.push(function(){ var d=id.data, Lm=new Uint8Array(id.width*id.height);
+      for(var q=0,o2=0;q<Lm.length;q++,o2+=4) Lm[q]=Math.max(d[o2],d[o2+1],d[o2+2]);
+      try{ add(readSlanted(Lm,id.width,id.height).map(function(t){ return {text:t}; })); }catch(e){} });
+    if(!nativeDet&&!zwPromise&&kind==="serial"&&L.n>25) msg("The scanner is still loading. Check your signal, or take a photo instead.");
+    jobs.reduce(function(pr,j){ return pr.then(j); },Promise.resolve()).then(function(){
+      if(L.stop) return;
+      var p=pickFrom(L.found,kind);
+      // a serial from the big label also brings the model; give it a moment to show up
+      if(p.value&&(kind!=="serial"||p.model||Date.now()-L.first>1500)) return finish();
+      if(L.n===40) msg("Still looking. Move closer, hold steady, and tilt away from glare.");
+      L.t=setTimeout(tick,40);
+    });
+  }
+}
+
+/* ---------- log a swap ---------- */
+var photos={};
+function logFormHtml(){
+  return '<section><div class="sec-h"><h2>Log a swap · '+esc(MARKETS[cur].name)+'</h2><p>Adds the red tag to the sheet as '+esc(user?user.name:"you")+'</p></div><form id="logForm" novalidate>'+
+    '<div id="logErr" class="formerr" hidden></div>'+
+    '<div class="f2">'+
+      '<label>Site ID<input id="lSite" type="text" class="mono" placeholder="'+MARKETS[cur].sitePh+'" autocomplete="off" autocapitalize="characters"><span class="hint" id="lSiteHint"></span></label>'+
+      '<label>Ticket (INC #)<input id="lTicket" type="text" class="mono" placeholder="INC130236867" autocomplete="off" autocapitalize="characters"><span class="hint"></span></label>'+
+      '<label>Radio<select id="lModel"><option value="">Choose radio</option>'+data.models.map(function(m){return '<option>'+esc(m)+'</option>';}).join("")+'</select><span class="hint"></span></label>'+
+      scanField("lBad","Bad radio serial (pulled)","serial",false)+
+    '</div><div class="f2">'+
+      '<label>Failure reason<select id="lReason"><option value="">Choose reason</option>'+REASONS.map(function(r){return '<option>'+esc(r)+'</option>';}).join("")+'</select><span class="hint"></span></label>'+
+      scanField("lAsset","T-Mobile asset tag","asset",true)+
+    '</div>'+
+    '<label class="check"><input id="lBox" type="checkbox"> Bad out of the box (new radio failed on install)</label>'+
+    '<label>Alarm notes<textarea id="lNotes" placeholder="TX out of order on ports 3 & 4, water intrusion, VSWR…"></textarea></label>'+
+    '<div class="photos">'+
+      '<label>Pulled radio serial tag<input id="ph1" type="file" accept="image/*" hidden><span class="btn quiet sm" role="button" tabindex="0" data-for="ph1" id="ph1b">Add photo</span><img class="thumb" id="ph1p" alt="Pulled radio label photo" hidden><span class="hint" id="ph1h"></span></label>'+
+    '</div>'+
+    '<div class="actions"><button class="btn red" type="submit" id="logBtn">Create red tag</button></div></form></section>';
+}
+function wireLogForm(){
+  var $=function(id){return document.getElementById(id);};
+  $("lSite").addEventListener("input",function(){ var raw=S($("lSite").value).toUpperCase(), n=normSite(raw,cur); $("lSiteHint").textContent= n&&n!==raw? "Saved as "+n : ""; });
+  wireScan(app);
+  var setPhoto=function(id,b64,fromScan){ photos[id]=b64; var img=$(id+"p"); img.src="data:image/jpeg;base64,"+b64; img.hidden=false; $(id+"b").textContent="Replace photo"; $(id+"h").textContent=fromScan?"From your scan":""; };
+  scanHooks.lBad=function(r){ if(r.model&&!$("lModel").value) $("lModel").value=r.model; checkBad(); if(r.photo&&!photos.ph1) setPhoto("ph1",r.photo,true); };
+  $("lBad").addEventListener("input",checkBad);
+  [].forEach.call(document.querySelectorAll("[data-for]"),function(b){ var open=function(){ $(b.dataset.for).click(); }; b.addEventListener("click",function(e){e.preventDefault();open();}); b.addEventListener("keydown",function(e){ if(e.key==="Enter"||e.key===" "){e.preventDefault();open();} }); });
+  ["ph1"].forEach(function(id){ $(id).addEventListener("change",function(){ var f=$(id).files[0]; if(!f) return; shrink(f).then(function(d){ setPhoto(id,d,false); }).catch(function(){ toast("That photo couldn't be read. Try another."); }); }); });
+  $("logForm").addEventListener("submit",function(e){ e.preventDefault();
+    var err=$("logErr"), show=function(m){ err.hidden=false; err.textContent=m; err.scrollIntoView({block:"center",behavior:"smooth"}); };
+    var site=normSite($("lSite").value,cur), tk=S($("lTicket").value).toUpperCase(), ticket=/^\d+$/.test(tk)?"INC"+tk:tk, model=$("lModel").value;
+    var bf=fieldVal("lBad","bad radio serial"), af=fieldVal("lAsset","asset tag");
+    var reason=$("lReason").value, box=$("lBox").checked, badSn=bf.value, notes=S($("lNotes").value), asset=af.value;
+    var miss=[]; if(!site) miss.push("site ID"); if(!ticket) miss.push("ticket number"); if(!model) miss.push("radio"); if(!badSn) miss.push("bad radio serial"); if(!reason) miss.push("failure reason");
+    if(miss.length) return show("Add "+miss.join(", ")+".");
+    var ferr=bf.error||af.error; if(ferr) return show(ferr);
+    if(!/^[A-Z0-9]{6,20}$/.test(badSn)) return show("Serials use only letters and numbers, at least 6 characters.");
+    if(box) reason+=" / BAD OUT THE BOX";
+    var typed=[]; if(bf.typed) typed.push("pulled serial"); if(af.typed&&asset) typed.push("asset tag");
+    if(typed.length) notes=(notes?notes+" · ":"")+"Typed by hand: "+typed.join(", ");
+    var btn=$("logBtn"); btn.disabled=true; btn.textContent="Saving…"; err.hidden=true;
+    var f={market:cur,site:site,ticket:ticket,model:model,badSn:badSn,reason:reason,notes:notes,asset:asset,
+      photoBad:photos.ph1?{data:photos.ph1,mime:"image/jpeg"}:null};
+    run("submitRedTag",token,f).then(function(){ tagFilter="open"; return load(true).then(function(){ render(); toast("Red tag created for "+site); var t=document.getElementById("tagSec"); if(t) t.scrollIntoView({behavior:"smooth"}); }); })
+      .catch(function(e2){ if(isAuthErr(e2)) return signedOut("Sign in again to continue."); show(errText(e2)); btn.disabled=false; btn.textContent="Create red tag"; });
+  });
+}
+function checkBad(){ var el=document.getElementById("lBad"), h=document.getElementById("lBadHint"), v=SN(el.value); if(!v) return;
+  var prior=data[cur].tags.filter(function(t){return t.badSn===v;})[0];
+  if(prior){ h.className="hint err"; h.textContent="Already tagged bad at "+prior.site+" on "+fmtDate(prior.date)+"."; }
+  else if(el.dataset.mode==="typed"){ h.className="hint"; h.textContent="Typed entries are flagged in the notes."; }
+  else { var hit=findRadio(v); h.className="hint"; h.textContent=hit&&hit.r.loc==="SITE"?"In inventory, installed at "+(hit.r.site||"a site")+".":""; } }
+function shrink(file){ return new Promise(function(res,rej){ var url=URL.createObjectURL(file), img=new Image(); img.onload=function(){ var s=Math.min(1,1600/Math.max(img.width,img.height)), c=document.createElement("canvas"); c.width=Math.round(img.width*s); c.height=Math.round(img.height*s); c.getContext("2d").drawImage(img,0,0,c.width,c.height); URL.revokeObjectURL(url); res(c.toDataURL("image/jpeg",.82).split(",")[1]); }; img.onerror=function(){ URL.revokeObjectURL(url); rej(new Error("read")); }; img.src=url; }); }
+
+/* ---------- navigation ---------- */
+var VIEWS={dashboard:viewDashboard,inventory:viewInventory,install:viewInstall,tags:viewTags};
+var curView="dashboard";
+function go(v){ if(v==="log") v="tags"; if(v==="spares") v="inventory"; if(!VIEWS[v]) v="dashboard"; curView=v; [].forEach.call(document.querySelectorAll(".tabs button"),function(b){ b.setAttribute("aria-current",b.dataset.view===v?"page":"false"); }); render(); window.scrollTo(0,0); }
+document.querySelector(".tabs").addEventListener("click",function(e){ var b=e.target.closest("button[data-view]"); if(b&&state.phase!=="signin") go(b.dataset.view); });
+function paintMarket(){ [].forEach.call(document.querySelectorAll("#mktSwitch button"),function(b){ b.setAttribute("aria-pressed",b.dataset.m===cur); }); }
+document.getElementById("mktSwitch").addEventListener("click",function(e){ var b=e.target.closest("button[data-m]"); if(!b||b.dataset.m===cur) return; cur=b.dataset.m; store.set("rtt-market",cur); paintMarket(); render(); });
+paintMarket();
+go("dashboard");
+load();
+window.__rtt={build:build,flags:flags,readSlanted:readSlanted,setData:function(r){ raw=r; user=r.user||user; isMgr=!!user&&user.role==="MANAGER"; data=build(r); lastLoad=Date.now(); state={phase:"ready",msg:""}; render(); }};
+})();
+</script>
+
+</body>
+</html>
