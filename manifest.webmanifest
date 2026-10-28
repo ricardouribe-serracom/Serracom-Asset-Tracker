@@ -1,6 +1,6 @@
 {
-  "name": "Red Tag Tracker",
-  "short_name": "Red Tags",
+  "name": "Serracom Inventory Tracker",
+  "short_name": "Serracom",
   "description": "Serracom radio inventory, installs and red tags",
   "start_url": "./",
   "scope": "./",
