@@ -1,5 +1,5 @@
 // Loads the newest version when there's signal; falls back to the last one saved on the phone when there isn't.
-var CACHE = "rtt-v1";
+var CACHE = "rtt-v3";
 var SHELL = ["./", "index.html", "config.js", "manifest.webmanifest", "icon-192.png", "apple-touch-icon.png"];
 self.addEventListener("install", function (e) { self.skipWaiting(); e.waitUntil(caches.open(CACHE).then(function (c) { return c.addAll(SHELL); })); });
 self.addEventListener("activate", function (e) { e.waitUntil(self.clients.claim()); });
