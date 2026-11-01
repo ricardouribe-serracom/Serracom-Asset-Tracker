@@ -246,6 +246,12 @@ body{padding-top:env(safe-area-inset-top,0px)}
 .ob-row.err{background:var(--crit-soft)}
 .ob-row span{min-width:0}
 .hist{font-size:12px;color:var(--muted);margin-top:4px}
+.acct-btns{display:flex !important;flex-wrap:wrap;gap:6px;justify-content:flex-end}
+.banner.preview{display:flex;flex-wrap:wrap;gap:4px 10px;align-items:center;margin-bottom:10px}
+.viewfinder video{transition:transform .15s ease-out;transform-origin:50% 50%}
+.zoom{position:absolute;left:50%;bottom:10px;transform:translateX(-50%);display:flex;gap:4px;background:rgba(0,0,0,.55);border-radius:999px;padding:4px}
+.zoom button{border:0;border-radius:999px;min-width:44px;min-height:36px;font:600 14px var(--body);background:transparent;color:#fff;cursor:pointer}
+.zoom button[aria-pressed="true"]{background:#fff;color:#111}
 </style>
 </head>
 <body>
@@ -280,8 +286,14 @@ var NOT_SPARE=["SITE","TELLWORKS"];
 var DEFAULT_MODELS=["AEHC","AAFIA","AHLOA","AHFIG","AHLOB","AHFII","FXFC","FXFB","AVHA"];
 var store={get:function(k){try{return localStorage.getItem(k);}catch(e){return null;}},set:function(k,v){try{localStorage.setItem(k,v);}catch(e){}}};
 var cur=MARKETS[store.get("rtt-market")]?store.get("rtt-market"):"AU";
-var token=store.get("rtt-token")||"", user=null, isMgr=false, team={};
+var token=store.get("rtt-token")||"", user=null, isMgr=false, team={}, viewAs=store.get("rtt-viewas")||"";
+function setRole(){ if(!user||user.role!=="MANAGER") viewAs=""; isMgr=!!user&&user.role==="MANAGER"&&!viewAs; }
+/** Managers can view the app as one of their leads (their truck, their view) to help them. */
+function viewMember(){ return viewAs&&team[viewAs]? team[viewAs] : null; }
+function asWho(){ return viewMember()? viewAs : ""; }
+function headerName(){ var v=viewMember(); return v? "Viewing as "+v.name : (user?user.name:""); }
 var data=null, raw=null, state={phase:token?"loading":"signin",msg:""}, lastLoad=0, loading=false, LOOKUP={};
+var sitesKey="", sitesCache=null;
 var signStep="email", signEmail=store.get("rtt-email")||"";
 var esc=function(s){return String(s==null?"":s).replace(/[&<>"']/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];});};
 var S=function(v){return v==null?"":String(v).trim();};
@@ -364,7 +376,7 @@ function errText(e){
 }
 function isAuthErr(e){ return /\bAUTH\b/.test(String(e&&e.message||e||"")); }
 function nameOf(email){ var e=S(email).toLowerCase(); if(team[e]) return team[e].name; if(e.indexOf("@")>0) return title(e.split("@")[0].replace(/[._]+/g," ").replace(/\d+/g,"").trim()); return S(email); }
-function myTruck(){ return user? H(user.truck) : ""; }
+function myTruck(){ var v=viewMember(); return v? H(v.truck) : user? H(user.truck) : ""; }
 
 /* ---------- parse the sheet ---------- */
 function build(r){
@@ -373,6 +385,11 @@ function build(r){
   if(r.settings&&r.settings.length>1){ var sh=r.settings[0].map(H), mi=hidx(sh,["MODEL"]), am=hidx(sh,["AU MIN SPARES"]), hm=hidx(sh,["HN MIN SPARES"]);
     out.targets={AU:{total:0,models:{}},HN:{total:0,models:{}}};
     r.settings.slice(1).forEach(function(x){ var md=H(x[mi]); if(!md) return; [["AU",am],["HN",hm]].forEach(function(p){ var n=parseInt(x[p[1]],10); if(isNaN(n)) return; if(/^ALL MODELS/.test(md)) out.targets[p[0]].total=n; else out.targets[p[0]].models[md]=n; }); }); }
+  out.sites={AU:[],HN:[]};
+  if(r.sites&&r.sites.length>1){ var sh2=r.sites[0].map(H), si=hidx(sh2,["SITE ID"]), sm=hidx(sh2,["MARKET"]), sa=hidx(sh2,["AREA"]), seen={};
+    r.sites.slice(1).forEach(function(x){ var id=SN(x[si]); if(!id||seen[id]) return; var m=H(x[sm]); if(!MARKETS[m]) m=/^[A-Z]{2}\d/.test(id)?"AU":"HN"; id=normSite(id,m); seen[id]=1;
+      out.sites[m].push({id:id,area:S(sa>=0?x[sa]:"")||siteArea(id,m)}); });
+    Object.keys(out.sites).forEach(function(m){ out.sites[m].sort(function(a,b){ return a.id.localeCompare(b.id); }); }); }
   Object.keys(MARKETS).forEach(function(m){ out[m]=buildMarket(m,r.markets[m]||{}); });
   return out;
 }
@@ -443,7 +460,7 @@ function flags(m){
       if(low.length) out.push({crit:none,title:plural(low.length,"model")+" below the spare minimum",detail:low.join(", ")+". Minimums are on the Settings tab."});
     } else {
       var models=[]; inv.forEach(function(r){ if(r.model!=="UNKNOWN"&&models.indexOf(r.model)<0) models.push(r.model); });
-      models.forEach(function(md){ var c=inv.filter(function(r){return r.model===md&&isSpare(r);}).length; if(c<2) out.push({crit:c===0,title:md+": "+(c===0?"no spares":"only 1 spare")+" on hand",detail:"Restock before the next swap."}); });
+      models.forEach(function(md){ var c=inv.filter(function(r){return r.model===md&&isSpare(r);}).length; if(c<(md==="AHLOB"?1:2)) out.push({crit:c===0,title:md+": "+(c===0?"no spares":"only 1 spare")+" on hand",detail:"Restock before the next swap."}); });
     }
   }
   return out.sort(function(a,b){return b.crit-a.crit;});
@@ -461,9 +478,10 @@ function load(quiet){
   if(!token){ signedOut(); return Promise.resolve(); }
   if(loading) return Promise.resolve(); loading=true;
   if(!quiet&&!data){ state={phase:"loading",msg:""}; render(); }
-  return run("getData",token).then(function(r){
-    raw=r; user=r.user; isMgr=user&&user.role==="MANAGER"; team={}; (r.team||[]).forEach(function(p){ team[S(p.email).toLowerCase()]=p; });
-    if(r.book){ var sm=document.querySelector(".brand small"); if(sm) sm.textContent=(user?user.name+" · ":"")+r.book; }
+  return run("getData",token,sitesKey).then(function(r){
+    if(r.sites) sitesCache=r.sites; else r.sites=sitesCache; sitesKey=r.sitesKey||"";
+    raw=r; user=r.user; team={}; (r.team||[]).forEach(function(p){ team[S(p.email).toLowerCase()]=p; }); if(viewAs&&!team[viewAs]){ viewAs=""; store.set("rtt-viewas",""); } setRole();
+    if(r.book){ var sm=document.querySelector(".brand small"); if(sm) sm.textContent=(user?headerName()+" · ":"")+r.book; }
     data=build(r); lastLoad=Date.now(); state={phase:"ready",msg:""}; loading=false; onData();
     setTimeout(flushOutbox,300);
     if(!zxWarm){ zxWarm=true; setTimeout(function(){ loadZW().catch(function(){}); },2500); }
@@ -478,7 +496,8 @@ document.addEventListener("visibilitychange",function(){ if(document.visibilityS
 function plural(n,w){ return n+' '+w+(n===1?'':'s'); }
 var app=document.getElementById("app");
 function liveLine(){
-  return '<div class="live" id="liveLine"><span class="dot'+(state.msg?" stale":"")+'"></span><span id="agoTxt">'+(state.msg?"Couldn't refresh · showing data from ":"Live from the sheet · updated ")+esc(ago(lastLoad))+'</span><button class="ghost" type="button" id="refreshBtn">Refresh</button></div>'+(state.msg?'<div class="banner">'+esc(state.msg)+'</div>':"");
+  var vm=viewMember();
+  return (vm?'<div class="banner info preview"><span>Viewing as <b>'+esc(vm.name)+'</b>'+(vm.truck?' · '+esc(title(vm.truck)):'')+'. Saves are recorded as you, done for them.</span><button class="linkbtn" type="button" id="exitPreview">Back to my view</button></div>':'')+'<div class="live" id="liveLine"><span class="dot'+(state.msg?" stale":"")+'"></span><span id="agoTxt">'+(state.msg?"Couldn't refresh · showing data from ":"Live from the sheet · updated ")+esc(ago(lastLoad))+'</span><button class="ghost" type="button" id="refreshBtn">Refresh</button></div>'+(state.msg?'<div class="banner">'+esc(state.msg)+'</div>':"");
 }
 setInterval(function(){ var a=document.getElementById("agoTxt"); if(a) a.textContent=(state.msg?"Couldn't refresh · showing data from ":"Live from the sheet · updated ")+ago(lastLoad); },30000);
 function chrome(){ var on=!!user&&state.phase!=="signin"; document.querySelector("nav.tabs").hidden=!on; document.getElementById("mktSwitch").hidden=!on; }
@@ -490,7 +509,10 @@ function render(){
   VIEWS[curView]();
   wireRefresh();
 }
-function wireRefresh(){ var rb=document.getElementById("refreshBtn"); if(rb) rb.onclick=function(){ toast("Refreshing…"); load(true).then(function(){ if(!state.msg) toast("Up to date"); }); }; }
+function setViewAs(email){ viewAs=email||""; store.set("rtt-viewas",viewAs); setRole(); var v=viewMember(); if(v&&MARKETS[v.market]){ cur=v.market; store.set("rtt-market",cur); paintMarket(); }
+  var sm=document.querySelector(".brand small"); if(sm&&raw) sm.textContent=headerName()+" · "+raw.book; render(); }
+function wireRefresh(){ var ex=document.getElementById("exitPreview"); if(ex) ex.onclick=function(){ setViewAs(""); toast("Back to your view"); };
+  var rb=document.getElementById("refreshBtn"); if(rb) rb.onclick=function(){ toast("Refreshing…"); load(true).then(function(){ if(!state.msg) toast("Up to date"); }); }; }
 function refreshLive(){ var l=document.getElementById("liveLine"); if(!l) return; var b=l.nextElementSibling; if(b&&b.classList.contains("banner")) b.parentNode.removeChild(b); var tmp=document.createElement("div"); tmp.innerHTML=liveLine(); while(tmp.lastChild) l.parentNode.insertBefore(tmp.lastChild,l.nextSibling); l.parentNode.removeChild(l); wireRefresh(); }
 function updateBadge(){ var b=document.getElementById("openBadge"); var n=data? data[cur].tags.filter(function(t){return t.ordered===false;}).length : 0; b.hidden=!n; b.textContent=n; }
 /** New data arrived: refresh lists without wiping a form someone is filling in. */
@@ -526,7 +548,7 @@ function viewSignIn(){
       var c=S(codeIn.value).replace(/\D/g,""), er=document.getElementById("siErr"), btn=document.getElementById("siBtn");
       if(c.length!==6){ er.textContent="Enter the 6 digits from the email."; return; }
       btn.disabled=true; btn.textContent="Signing in…";
-      run("verifyCode",signEmail,c).then(function(r){ token=r.token; store.set("rtt-token",token); user=r.user; isMgr=user.role==="MANAGER"; if(user.market&&MARKETS[user.market]){ cur=user.market; store.set("rtt-market",cur); paintMarket(); }
+      run("verifyCode",signEmail,c).then(function(r){ token=r.token; store.set("rtt-token",token); user=r.user; setRole(); if(user.market&&MARKETS[user.market]){ cur=user.market; store.set("rtt-market",cur); paintMarket(); }
           state={phase:"loading",msg:""}; go("dashboard"); load(); })
         .catch(function(err){ er.textContent=errText(err); btn.disabled=false; btn.textContent="Sign in"; if(/CODE_EXPIRED|TOO_MANY/.test(String(err&&err.message))) codeIn.value=""; });
     });
@@ -564,10 +586,12 @@ function barList(rs){ if(!rs.length) return '<div class="bars"><span class="note
   return '<div class="bars">'+rs.map(function(r){return '<div class="bar"><span class="n">'+esc(r.label)+'</span><span class="c">'+r.n+'</span><div class="track"><div class="fill" style="width:'+(r.n/max*100).toFixed(1)+'%"></div></div></div>';}).join("")+'</div>'; }
 function accountPanel(){
   if(!user) return '';
-  var t=myTruck();
-  return '<section><div class="sec-h"><h2>Your account</h2><p>'+esc(user.email)+'</p></div><div class="acct"><div><b>'+esc(user.name)+'</b><span>'+(isMgr?"Manager":"Lead")+' · '+(MARKETS[user.market]?esc(user.market):'AU and HN')+(t?' · '+esc(title(t)):'')+'</span></div><button class="btn quiet sm" type="button" id="signOutBtn">Sign out</button></div></section>';
+  var t=myTruck(), mgr=user.role==="MANAGER";
+  return '<section><div class="sec-h"><h2>Your account</h2><p>'+esc(user.email)+'</p></div><div class="acct"><div><b>'+esc(user.name)+'</b><span>'+(mgr?"Manager":"Lead")+' · '+(MARKETS[user.market]?esc(user.market):'AU and HN')+(t?' · '+esc(title(t)):'')+'</span></div><div class="acct-btns">'+
+    (mgr?'<select id="viewAsSel" class="btn quiet sm" aria-label="View the app as a lead"><option value="">View as…</option>'+Object.keys(team).filter(function(e){ return e!==user.email; }).sort(function(a,b){ return team[a].name.localeCompare(team[b].name); }).map(function(e){ return '<option value="'+esc(e)+'"'+(e===viewAs?' selected':'')+'>'+esc(team[e].name)+'</option>'; }).join("")+'</select>':'')+'<button class="btn quiet sm" type="button" id="signOutBtn">Sign out</button></div></div></section>';
 }
-function wireAccount(){ var b=document.getElementById("signOutBtn"); if(b) b.onclick=function(){ var t=token; signedOut(); run("signOut",t).catch(function(){}); }; }
+function wireAccount(){ var sel=document.getElementById("viewAsSel"); if(sel) sel.onchange=function(){ if(!sel.value) return; setViewAs(sel.value); toast("Viewing as "+team[sel.value].name); };
+  var b=document.getElementById("signOutBtn"); if(b) b.onclick=function(){ var t=token; signedOut(); run("signOut",t).catch(function(){}); }; }
 
 /* ---------- saving that survives no signal ---------- */
 // Saves are kept on the phone when there's no signal and sent automatically later.
@@ -618,6 +642,27 @@ window.addEventListener("online",function(){ flushOutbox(); });
 setInterval(function(){ if(navigator.onLine!==false&&outbox().some(function(x){return !x.error;})) flushOutbox(); },60000);
 document.addEventListener("visibilitychange",function(){ if(document.visibilityState==="visible") flushOutbox(); });
 function savedMsg(r,msg){ toast(r&&r.queued? "No signal. Saved on this phone, it'll send on its own." : msg); }
+
+/* site IDs: pick from the Sites tab list, or type a new one */
+var SITE_AREAS={AU:"Austin",CC:"Corpus",SA:"San Antonio",TK:"Waco",WA:"Waco",DA:"Dallas"};
+function siteArea(id,m){ return SITE_AREAS[String(id||"").slice(0,2)]||(m==="HN"?"Houston":""); }
+function siteList(m){ return (data&&data.sites&&data.sites[m])||[]; }
+function siteField(id){
+  var list=siteList(cur);
+  return '<label>Site ID<input id="'+id+'" type="text" class="mono" list="'+id+'Opts" placeholder="'+(list.length?'Pick or type, e.g. ':'')+MARKETS[cur].sitePh+'" autocomplete="off" autocapitalize="characters" spellcheck="false">'+
+    '<datalist id="'+id+'Opts">'+list.map(function(s){ return '<option value="'+esc(s.id)+'">'+esc(s.area)+'</option>'; }).join("")+'</datalist><span class="hint" id="'+id+'Hint"></span></label>';
+}
+function wireSite(id){
+  var el=document.getElementById(id), h=document.getElementById(id+"Hint");
+  el.addEventListener("input",function(){
+    var raw=S(el.value).toUpperCase(), n=normSite(raw,cur), pre=n&&n!==raw?"Saved as "+n+". ":"";
+    if(!n){ h.className="hint"; h.textContent=""; return; }
+    var hit=siteList(cur).filter(function(s){ return s.id===n; })[0];
+    if(hit){ h.className="hint ok"; h.textContent=pre+(hit.area||"On the site list"); }
+    else if(n.length>=6){ h.className="hint"; h.textContent=pre+"Not on the site list yet. It'll be added."; }
+    else { h.className="hint"; h.textContent=pre; }
+  });
+}
 
 /* inventory + asset transfer */
 var invFilter="All", invQuery="", receiving=null;
@@ -679,7 +724,7 @@ function viewInventory(){
     if(!hit&&!m) return bad("Choose the radio model.");
     if(!hit&&!a&&!noTag) return bad("Scan the T-Mobile asset tag, or tick \"No asset tag on this radio\".");
     var dupA=findAsset(a,v); if(dupA) return bad("Asset tag "+a+" is already on radio "+dupA.r.sn+". Check the tag.");
-    var d={sn:v,model:m,asset:a,noAsset:noTag,dest:dest,scan:scanRaw,rma:dest==="TELLWORKS"?S($("xfRma").value):"",typed:typedList([[sf,"serial"],[af,"asset tag"]])};
+    var d={as:asWho(),sn:v,model:m,asset:a,noAsset:noTag,dest:dest,scan:scanRaw,rma:dest==="TELLWORKS"?S($("xfRma").value):"",typed:typedList([[sf,"serial"],[af,"asset tag"]])};
     var btn=$("xfBtn"); btn.disabled=true; btn.textContent="Saving…";
     var p= rc? save("receiveOrder",[token,cur,rc.row,rc.badSn,d],"Received "+v+" for "+rc.site) : save("transferRadio",[token,cur,d],v+" to "+title(destName));
     p.then(function(r){
@@ -728,7 +773,7 @@ function onReportBad(e){
   o.querySelector('[data-act="ok"]').onclick=function(){ var why=document.getElementById("rbWhy").value, bt=this;
     if(!why){ document.getElementById("rbErr").textContent="Pick a reason."; return; }
     bt.disabled=true; bt.textContent="Saving…";
-    save("markBad",[token,cur,sn,why],sn+" marked bad").then(function(r){ closeScan(); savedMsg(r,sn+" marked bad"); return load(true); })
+    save("markBad",[token,cur,sn,why,asWho()],sn+" marked bad").then(function(r){ closeScan(); savedMsg(r,sn+" marked bad"); return load(true); })
       .catch(function(err){ if(isAuthErr(err)) return signedOut("Sign in again to continue."); document.getElementById("rbErr").textContent=errText(err); bt.disabled=false; bt.textContent="Mark bad"; }); };
 }
 /** Search box doubles as "check a radio": where it is, in either market, and its red tag history. */
@@ -752,7 +797,7 @@ function viewInstall(){
   app.innerHTML=liveLine()+
   '<section><div class="sec-h"><h2>Install · '+esc(MARKETS[cur].name)+'</h2><p>Moves a radio to a site</p></div><form id="inForm" novalidate><div class="f2">'+
     scanField("inSn","Radio serial","serial",false)+
-    '<label>Site ID<input id="inSite" type="text" class="mono" placeholder="'+MARKETS[cur].sitePh+'" autocomplete="off" autocapitalize="characters"><span class="hint" id="inSiteHint"></span></label>'+
+    siteField("inSite")+
     '<label id="inModelL" hidden>Radio<select id="inModel"><option value="">Choose radio</option>'+data.models.map(function(m){return '<option>'+esc(m)+'</option>';}).join("")+'</select><span class="hint">Not in inventory yet, so it\'s added as installed</span></label>'+
     '<div id="inAssetW" hidden>'+scanField("inAsset","T-Mobile asset tag","asset",true)+'</div>'+
   '</div><div id="inErr" class="formerr" hidden></div><div class="actions"><button class="btn red" type="submit" id="inBtn">Install</button></div></form></section>'+
@@ -770,7 +815,7 @@ function viewInstall(){
   scanHooks.inSn=function(r){ scanRaw=r.raw||""; check(); if(r.model) $("inModel").value=r.model; };
   scanHooks["inSn:mode"]=function(){ scanRaw=""; };
   $("inSn").addEventListener("input",check);
-  $("inSite").addEventListener("input",function(){ var raw=S($("inSite").value).toUpperCase(), n=normSite(raw,cur); $("inSiteHint").textContent= n&&n!==raw? "Saved as "+n : ""; });
+  wireSite("inSite");
   $("inForm").addEventListener("submit",function(e){ e.preventDefault();
     var err=$("inErr"), show=function(m){ err.hidden=false; err.textContent=m; err.scrollIntoView({block:"center",behavior:"smooth"}); };
     var sf=fieldVal("inSn","serial number"), af=fieldVal("inAsset","asset tag"), sn=sf.value, site=normSite($("inSite").value,cur);
@@ -778,7 +823,7 @@ function viewInstall(){
     if(!sn) return show("Scan the radio you're installing."); if(sf.error) return show(sf.error); if(af.error) return show(af.error);
     if(!/^[A-Z0-9]{6,20}$/.test(sn)) return show("Serials use only letters and numbers.");
     if(!site) return show("Add the site ID.");
-    var hit=findRadio(sn), d={sn:sn,site:site,typed:typedList([[sf,"serial"],[af,"asset tag"]])};
+    var hit=findRadio(sn), d={as:asWho(),sn:sn,site:site,typed:typedList([[sf,"serial"],[af,"asset tag"]])};
     if(hit){
       if(hit.m!==cur) return show(sn+" is listed in "+hit.m+" inventory. Switch to "+hit.m+" at the top.");
       if(hit.r.loc==="SITE") return show(sn+" is already installed"+(hit.r.site?" at "+hit.r.site:"")+".");
@@ -1236,11 +1281,21 @@ function liveFallback(kind,cb,msg){
 function startLive(kind,cb){
   stopLive();
   var o=scanOverlay('<h3>Scan the '+esc(KIND_TXT[kind])+'</h3>'+
-    '<div class="viewfinder"><video id="scanVid" playsinline muted autoplay></video><div class="aim" aria-hidden="true"></div></div>'+
+    '<div class="viewfinder"><video id="scanVid" playsinline muted autoplay></video><div class="aim" aria-hidden="true"></div>'+
+      '<div class="zoom" role="group" aria-label="Zoom">'+[1,2,3].map(function(z){ return '<button type="button" data-z="'+z+'" aria-pressed="false">'+z+'×</button>'; }).join("")+'</div></div>'+
     '<p class="note" id="liveMsg">Starting the camera…</p>'+
     '<div class="actions"><button class="btn quiet sm" type="button" data-act="torch" hidden>Light on</button><button class="btn quiet" type="button" data-act="photo">Take a photo instead</button><button class="btn quiet" type="button" data-act="cancel">Cancel</button></div>');
   o.classList.add("live");
-  var L=live={stop:false,found:[],seen:{},n:0,first:0,torch:false};
+  var L=live={stop:false,found:[],seen:{},n:0,first:0,torch:false,zoom:1,nativeZoom:false};
+  var zoomTo=function(z,track,caps){
+    L.zoom=z; try{ localStorage.setItem("rtt-zoom",String(z)); }catch(e){}
+    [].forEach.call(o.querySelectorAll("[data-z]"),function(b){ b.setAttribute("aria-pressed",String(+b.dataset.z===z)); });
+    var v=document.getElementById("scanVid");
+    if(caps&&caps.zoom&&caps.zoom.max>=2){   // the phone's own zoom: real detail, not just bigger pixels
+      L.nativeZoom=true; if(v) v.style.transform="";
+      track.applyConstraints({advanced:[{zoom:Math.max(caps.zoom.min||1,Math.min(caps.zoom.max,z))}]}).catch(function(){ L.nativeZoom=false; if(v) v.style.transform="scale("+z+")"; });
+    } else { L.nativeZoom=false; if(v) v.style.transform="scale("+z+")"; }
+  };
   var msg=function(t){ var m=document.getElementById("liveMsg"); if(m) m.textContent=t; };
   o.querySelector('[data-act="cancel"]').onclick=function(){ stopLive(); closeScan(); };
   o.querySelector('[data-act="photo"]').onclick=function(){ stopLive(); startPhoto(kind,cb); };
@@ -1251,9 +1306,12 @@ function startLive(kind,cb){
     var track=stream.getVideoTracks()[0], caps={}; try{ caps=track.getCapabilities? track.getCapabilities() : {}; }catch(e){}
     if(caps.torch){ var tb=o.querySelector('[data-act="torch"]'); tb.hidden=false;
       tb.onclick=function(){ L.torch=!L.torch; track.applyConstraints({advanced:[{torch:L.torch}]}).catch(function(){}); tb.textContent=L.torch?"Light off":"Light on"; }; }
+    var z0=1; try{ z0=+localStorage.getItem("rtt-zoom")||1; }catch(e){}
+    [].forEach.call(o.querySelectorAll("[data-z]"),function(b){ b.onclick=function(){ zoomTo(+b.dataset.z,track,caps); }; });
+    zoomTo(z0>=1&&z0<=3?z0:1,track,caps);
     if(caps.focusMode&&caps.focusMode.indexOf("continuous")>=0) track.applyConstraints({advanced:[{focusMode:"continuous"}]}).catch(function(){});
     return Promise.resolve(v.play()).catch(function(){}).then(function(){
-      msg(kind==="asset"?"Hold the pink tag inside the box.":"Hold the label inside the box. Get close enough that it's sharp.");
+      msg(kind==="asset"?"Hold the pink tag inside the box. Blurry? Back up and use 2× or 3×.":"Hold the label inside the box. Blurry up close? Back up and use 2× or 3×.");
       loadZW().catch(function(){}); getNative();
       tick();
     });
@@ -1279,9 +1337,10 @@ function startLive(kind,cb){
     var v=document.getElementById("scanVid");
     if(!v||v.readyState<2||!v.videoWidth){ L.t=setTimeout(tick,120); return; }
     // read the whole frame (cropping can cut the bars the slanted reader needs to find the tag)
-    var vw=v.videoWidth, vh=v.videoHeight, s=Math.min(1,1600/Math.max(vw,vh));
+    // digital zoom reads the middle of the frame at full detail
+    var z=L.nativeZoom?1:L.zoom, vw=v.videoWidth/z, vh=v.videoHeight/z, sx=(v.videoWidth-vw)/2, sy=(v.videoHeight-vh)/2, s=Math.min(1,1600/Math.max(vw,vh));
     cv.width=Math.round(vw*s); cv.height=Math.round(vh*s);
-    g.drawImage(v,0,0,vw,vh,0,0,cv.width,cv.height);
+    g.drawImage(v,sx,sy,vw,vh,0,0,cv.width,cv.height);
     var id=g.getImageData(0,0,cv.width,cv.height); L.n++;
     var jobs=[];
     if(nativeDet) jobs.push(function(){ return nativeDet.detect(cv).then(function(rs){ add(rs.map(function(r){ return {text:r.rawValue}; })); },function(){}); });
@@ -1304,10 +1363,10 @@ function startLive(kind,cb){
 /* ---------- log a swap ---------- */
 var photos={};
 function logFormHtml(){
-  return '<section><div class="sec-h"><h2>Log a swap · '+esc(MARKETS[cur].name)+'</h2><p>Adds the red tag to the sheet as '+esc(user?user.name:"you")+'</p></div><form id="logForm" novalidate>'+
+  return '<section><div class="sec-h"><h2>Log a swap · '+esc(MARKETS[cur].name)+'</h2><p>'+(viewMember()?'Adds the red tag as you, for '+esc(viewMember().name):'Adds the red tag to the sheet as '+esc(user?user.name:"you"))+'</p></div><form id="logForm" novalidate>'+
     '<div id="logErr" class="formerr" hidden></div>'+
     '<div class="f2">'+
-      '<label>Site ID<input id="lSite" type="text" class="mono" placeholder="'+MARKETS[cur].sitePh+'" autocomplete="off" autocapitalize="characters"><span class="hint" id="lSiteHint"></span></label>'+
+      siteField("lSite")+
       '<label>Ticket (INC #)<input id="lTicket" type="text" class="mono" placeholder="INC130236867" autocomplete="off" autocapitalize="characters"><span class="hint"></span></label>'+
       '<label>Radio<select id="lModel"><option value="">Choose radio</option>'+data.models.map(function(m){return '<option>'+esc(m)+'</option>';}).join("")+'</select><span class="hint"></span></label>'+
       scanField("lBad","Bad radio serial (pulled)","serial",false)+
@@ -1324,7 +1383,7 @@ function logFormHtml(){
 }
 function wireLogForm(){
   var $=function(id){return document.getElementById(id);};
-  $("lSite").addEventListener("input",function(){ var raw=S($("lSite").value).toUpperCase(), n=normSite(raw,cur); $("lSiteHint").textContent= n&&n!==raw? "Saved as "+n : ""; });
+  wireSite("lSite");
   wireScan(app);
   var setPhoto=function(id,b64,fromScan){ photos[id]=b64; var img=$(id+"p"); img.src="data:image/jpeg;base64,"+b64; img.hidden=false; $(id+"b").textContent="Replace photo"; $(id+"h").textContent=fromScan?"From your scan":""; };
   scanHooks.lBad=function(r){ if(r.model&&!$("lModel").value) $("lModel").value=r.model; checkBad(); if(r.photo&&!photos.ph1) setPhoto("ph1",r.photo,true); };
@@ -1344,7 +1403,7 @@ function wireLogForm(){
     var typed=[]; if(bf.typed) typed.push("pulled serial"); if(af.typed&&asset) typed.push("asset tag");
     if(typed.length) notes=(notes?notes+" · ":"")+"Typed by hand: "+typed.join(", ");
     var btn=$("logBtn"); btn.disabled=true; btn.textContent="Saving…"; err.hidden=true;
-    var f={market:cur,site:site,ticket:ticket,model:model,badSn:badSn,reason:reason,notes:notes,asset:asset,box:box,
+    var f={as:asWho(),market:cur,site:site,ticket:ticket,model:model,badSn:badSn,reason:reason,notes:notes,asset:asset,box:box,
       photoBad:photos.ph1?{data:photos.ph1,mime:"image/jpeg"}:null};
     save("submitRedTag",[token,f],"Red tag "+site).then(function(r){ tagFilter="open"; return load(true).then(function(){ render();
         savedMsg(r,"Red tag created for "+site+(r&&r.inv?". "+badSn+" is now with "+title(r.inv.to)+", marked bad.":""));
@@ -1376,4 +1435,3 @@ window.__rtt={build:build,flags:flags,readSlanted:readSlanted,setData:function(r
 
 </body>
 </html>
-
