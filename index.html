@@ -252,6 +252,17 @@ body{padding-top:env(safe-area-inset-top,0px)}
 .zoom{position:absolute;left:50%;bottom:10px;transform:translateX(-50%);display:flex;gap:4px;background:rgba(0,0,0,.55);border-radius:999px;padding:4px}
 .zoom button{border:0;border-radius:999px;min-width:44px;min-height:36px;font:600 14px var(--body);background:transparent;color:#fff;cursor:pointer}
 .zoom button[aria-pressed="true"]{background:#fff;color:#111}
+.site-pick{position:relative}
+.filters2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.filters2 label{display:grid;gap:4px;font-size:13px;font-weight:500;min-width:0}
+.filters2 select{width:100%;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:9px 10px;font-size:16px}
+.site-pick input{text-transform:uppercase}
+.site-sugg{display:grid;gap:0;margin-top:4px;background:var(--surface);border:1px solid var(--line);border-radius:8px;overflow:hidden;box-shadow:0 6px 18px rgba(0,0,0,.12)}
+.site-sugg button{display:flex;justify-content:space-between;align-items:center;gap:10px;border:0;border-bottom:1px solid var(--line);background:var(--surface);padding:11px 12px;font:inherit;text-align:left;cursor:pointer;min-height:44px}
+.site-sugg button:last-of-type{border-bottom:0}
+.site-sugg button:hover,.site-sugg button:focus-visible{background:var(--chip)}
+.site-sugg small{color:var(--muted);font-size:12px}
+.site-sugg .note{padding:8px 12px;margin:0}
 </style>
 </head>
 <body>
@@ -318,6 +329,7 @@ function parseCode(text){
     else if(/^TM[A-Z0-9]{6,10}$/.test(c)) out.asset=c;
     else if(/^S[A-Z0-9]{11}$/.test(c)) out.serial=c.slice(1);
     else if(/^[A-Z0-9]{11}$/.test(c)) out.serial=c;
+    else if(/^[A-Z0-9]{6,16}$/.test(c)) out.other=c;
   }
   if(out.code) out.model=LOOKUP[out.code]||"";
   return out;
@@ -366,6 +378,8 @@ function errText(e){
   if(m.indexOf("NOT_FOUND")>=0) return "That row moved in the sheet. Refresh and try again.";
   if(m.indexOf("BAD_SERIAL")>=0) return "Serials use only letters and numbers.";
   if(m.indexOf("NO_TAB:")>=0) return "The sheet is missing the \""+after("NO_TAB:")+"\" tab. Run setupTabs again.";
+  if(m.indexOf("MISSING:photo")>=0) return "Add a photo of the serial tag.";
+  if(m.indexOf("MISSING:notes")>=0) return "Add the alarm notes.";
   if(m.indexOf("MISSING:")>=0) return "A required field is empty.";
   if(m.indexOf("AUTH")>=0) return "Please sign in again.";
   if(m.indexOf("Lock")>=0||m.indexOf("lock")>=0) return "Someone else is saving right now. Try again in a few seconds.";
@@ -396,12 +410,12 @@ function build(r){
 function buildMarket(m,t){
   var res={inv:null,tags:[]};
   if(t.inv&&t.inv.length){
-    var h=t.inv[0].map(H), c={st:hidx(h,["STATUS"]),md:hidx(h,["RADIO"]),nt:hidx(h,["NOTES"]),loc:hidx(h,["LOCATION"]),sn:hidx(h,["SERIAL NUMBER"]),scan:hidx(h,["SCANNED SN"]),as:hidx(h,["ASSET NUMBER"]),sas:hidx(h,["SCANNED ASSET"]),by:hidx(h,["LAST MOVED BY"]),at:hidx(h,["LAST MOVED"]),ds:hidx(h,["DATE OF SCAN"]),rma:hidx(h,["RMA #"]),sh:hidx(h,["SHIPPED"])};
+    var h=t.inv[0].map(H), c={st:hidx(h,["STATUS"]),md:hidx(h,["RADIO"]),nt:hidx(h,["NOTES"]),loc:hidx(h,["LOCATION"]),sn:hidx(h,["SERIAL NUMBER"]),scan:hidx(h,["SCANNED SN"]),as:hidx(h,["ASSET NUMBER"]),sas:hidx(h,["SCANNED ASSET"]),by:hidx(h,["LAST MOVED BY"]),at:hidx(h,["LAST MOVED"]),ds:hidx(h,["DATE OF SCAN"]),rma:hidx(h,["RMA #"]),sh:hidx(h,["SHIPPED"]),ph:hidx(h,["INSTALL PHOTO"])};
     res.inv=t.inv.slice(1).map(function(x,i){
       var scan=parseScan(x[c.scan]); var sn=SN(x[c.sn])||(scan&&scan.sn)||""; if(!sn) return null;
       var loc=H(x[c.loc]), note=S(x[c.nt]);
       return {row:i+2,status:H(x[c.st])||"GOOD",model:H(x[c.md])||(scan&&scan.model)||"UNKNOWN",loc:loc&&loc!=="???"?loc:"NO LOCATION",sn:sn,asset:SN(x[c.as])||SN(x[c.sas]),
-        site:loc==="SITE"&&note?note.toUpperCase():"", note:loc==="SITE"?"":note, rma:c.rma>=0?S(x[c.rma]):"", shipped:c.sh>=0?toDate(x[c.sh]):null,
+        site:loc==="SITE"&&note?note.toUpperCase():"", note:loc==="SITE"?"":note, rma:c.rma>=0?S(x[c.rma]):"", photo:c.ph>=0&&/^https:\/\//.test(S(x[c.ph]))?S(x[c.ph]):"", shipped:c.sh>=0?toDate(x[c.sh]):null,
         by:c.by>=0?S(x[c.by]):"", at:toDate(c.at>=0?x[c.at]:"")||toDate(c.ds>=0?x[c.ds]:"")};
     }).filter(Boolean);
   }
@@ -437,7 +451,7 @@ function flags(m){
   var open=tg.filter(function(t){return t.ordered===false;});
   var late=tg.filter(function(t){ return t.ordered===true&&!t.received&&t.orderedOn&&Date.now()-t.orderedOn.getTime()>14*864e5; });
   if(late.length) out.push({crit:false,title:plural(late.length,"replacement order")+" waiting over 2 weeks",detail:late.slice(0,4).map(function(t){return t.site+" (ordered "+fmtDate(t.orderedOn)+")";}).join(", ")+". Follow up on the order."});
-  if(open.length){ var o=open[open.length-1]; out.push({crit:true,title:open.length+(open.length>1?" swaps still need":" swap still needs")+" a replacement order",detail:"Oldest is "+o.site+" from "+fmtDate(o.date)+(isMgr?". Tap Mark order submitted on the Red tags tab once it's in.":". A manager marks it submitted once it's ordered.")}); }
+  if(open.length&&isMgr){ var o=open[open.length-1]; out.push({crit:true,title:open.length+(open.length>1?" swaps still need":" swap still needs")+" a replacement order",detail:"Oldest is "+o.site+" from "+fmtDate(o.date)+(isMgr?". Tap Mark order submitted on the Red tags tab once it's in.":". A manager marks it submitted once it's ordered.")}); }
   var missing=tg.filter(function(t){return t.ordered===null;});
   if(missing.length) out.push({crit:false,title:missing.length+" red tag"+(missing.length>1?"s aren't":" isn't")+" on the Bad Radios list",detail:missing.slice(0,4).map(function(t){return t.badSn+" at "+t.site;}).join(", ")});
   var g={}; tg.forEach(function(t){ var v=t.badSn; if(v&&v.length>=8&&!/^(N\/?A|NONE)$/.test(v)) (g[v]=g[v]||[]).push(t); });
@@ -449,7 +463,7 @@ function flags(m){
     if(dups.length) out.push({crit:true,title:dups.length+" serial"+(dups.length>1?"s are":" is")+" listed more than once",detail:dups.slice(0,5).join(", ")+". Delete the extra row in the sheet."});
     var nl=inv.filter(function(r){return r.loc==="NO LOCATION";}); if(nl.length) out.push({crit:false,title:nl.length+" radio"+(nl.length>1?"s have":" has")+" no location",detail:nl.slice(0,5).map(function(r){return r.sn;}).join(", ")+(nl.length>5?"…":"")+". Scan them with Asset Transfer to set one."});
     var ship=inv.filter(function(r){ return r.status!=="GOOD"&&r.loc!=="TELLWORKS"; });
-    if(ship.length) out.push({crit:false,title:plural(ship.length,"bad radio")+" not shipped to Tellworks yet",detail:ship.slice(0,5).map(function(r){return r.sn+" ("+title(r.loc)+")";}).join(", ")+". Use Asset Transfer → Tellworks when it ships."});
+    if(ship.length&&isMgr) out.push({crit:false,title:plural(ship.length,"bad radio")+" not shipped to Tellworks yet",detail:ship.slice(0,5).map(function(r){return r.sn+" ("+title(r.loc)+")";}).join(", ")+". Move them to Tellworks in the Inventory list when they ship."});
     var tg2=data.targets&&data.targets[m];
     if(tg2){
       var have=inv.filter(isSpare).length;
@@ -564,16 +578,16 @@ function viewDashboard(){
   if(inv&&inv.length){
     var locs=locsFor(cur).filter(function(l){ return NOT_SPARE.indexOf(l)<0&&inv.some(function(r){return r.loc===l&&isSpare(r);}); });
     var models=[]; inv.forEach(function(r){ if(isSpare(r)&&models.indexOf(r.model)<0) models.push(r.model); }); models.sort();
-    if(locs.length) table='<section><div class="sec-h"><h2>Spares by location</h2><p>Good radios not at a site or Tellworks</p></div><div class="tbl-wrap"><table><thead><tr><th>Model</th>'+locs.map(function(l){return '<th>'+esc(title(l))+'</th>';}).join("")+'<th>Total</th></tr></thead><tbody>'+
-      models.map(function(md){ var c=locs.map(function(l){return inv.filter(function(r){return r.model===md&&r.loc===l&&isSpare(r);}).length;}); var tot=c.reduce(function(a,b){return a+b;},0); return '<tr><td><span class="model">'+esc(md)+'</span></td>'+c.map(function(x){return '<td>'+x+'</td>';}).join("")+'<td class="'+(tot<2?"low":"")+'">'+tot+(tot<2?'<span class="lowtag">LOW</span>':"")+'</td></tr>'; }).join("")+'</tbody></table></div></section>';
+    if(locs.length) table='<section><div class="sec-h"><h2>Spares by location</h2><p>Good radios not at a site or Tellworks</p></div><div class="tbl-wrap"><table><thead><tr><th>Model</th><th>Total</th>'+locs.map(function(l){return '<th>'+esc(title(l))+'</th>';}).join("")+'</tr></thead><tbody>'+
+      models.map(function(md){ var c=locs.map(function(l){return inv.filter(function(r){return r.model===md&&r.loc===l&&isSpare(r);}).length;}); var tot=c.reduce(function(a,b){return a+b;},0); var min=data.targets&&data.targets[cur]&&data.targets[cur].models[md]!=null? data.targets[cur].models[md] : (md==="AHLOB"?1:2), low=tot<min;
+        return '<tr><td><span class="model">'+esc(md)+'</span></td><td class="tot'+(low?" low":"")+'">'+tot+(low?'<span class="lowtag">LOW</span>':"")+'</td>'+c.map(function(x){return '<td>'+x+'</td>';}).join("")+'</tr>'; }).join("")+'</tbody></table></div></section>';
   }
   var rc={}; tg.forEach(function(t){ var k=(t.reason||"No reason given").replace(/\s*[\/·]\s*BAD OUT THE BOX$/i,"").replace(/\s+/g," ").trim(), key=k.toLowerCase(); rc[key]=rc[key]||{label:k,n:0}; rc[key].n++; });
   var rs=Object.keys(rc).map(function(k){return rc[k];}).sort(function(a,b){return b.n-a.n;}).slice(0,8);
   app.innerHTML=liveLine()+
   '<section><div class="sec-h"><h2>'+esc(MARKETS[cur].name)+'</h2><p>'+plural(inv?inv.length:0,'radio')+' · '+plural(tg.length,'red tag')+'</p></div><div class="stats">'+
-    '<div class="stat'+(open?" hot":"")+'"><span class="v">'+open+'</span><span class="l">Orders not submitted</span></div>'+
+    (isMgr?'<div class="stat'+(open?" hot":"")+'"><span class="v">'+open+'</span><span class="l">Orders not submitted</span></div>':'')+
     '<div class="stat"><span class="v">'+(spares==null?"–":spares)+'</span><span class="l">Good spares on hand</span></div>'+
-    '<div class="stat"><span class="v">'+installed+'</span><span class="l">Installed at sites</span></div>'+
     '<div class="stat"><span class="v">'+thisMonth+'</span><span class="l">Red tags this month</span></div></div></section>'+
   '<section><div class="sec-h"><h2>Needs attention</h2><p>Checked against inventory and red tags</p></div><div class="flags">'+
     (fl.length? fl.map(function(f){return '<div class="flag'+(f.crit?" crit":"")+'"><i></i><div><strong>'+esc(f.title)+'</strong><span>'+esc(f.detail)+'</span></div></div>';}).join("") : '<div class="allclear">Nothing needs attention right now.</div>')+'</div></section>'+
@@ -600,7 +614,7 @@ var OUTBOX_KEY="rtt-outbox", flushing=false;
 function outbox(){ try{ return JSON.parse(store.get(OUTBOX_KEY)||"[]")||[]; }catch(e){ return []; } }
 function setOutbox(a){
   try{ localStorage.setItem(OUTBOX_KEY,JSON.stringify(a)); return true; }catch(e){}
-  a.forEach(function(x){ (x.args||[]).forEach(function(v){ if(v&&v.photoBad){ v.photoBad=null; v.notes=(v.notes?v.notes+" · ":"")+"Photo dropped (phone storage full)"; } }); });
+  a.forEach(function(x){ (x.args||[]).forEach(function(v){ if(v&&v.photoBad){ v.photoBad=null; v.notes=(v.notes?v.notes+" · ":"")+"Photo dropped (phone storage full)"; } if(v&&v.photo&&v.photo.data){ v.photo=null; v.photoDropped=true; } }); });
   try{ localStorage.setItem(OUTBOX_KEY,JSON.stringify(a)); return true; }catch(e2){ return false; }
 }
 function isNetErr(e){ return /Failed to fetch|NetworkError|Load failed|network|HTTP_5\d\d|HTTP 0|abort|timed? ?out|Connection failure/i.test(String(e&&(e.name+" "+e.message)||e||"")); }
@@ -648,24 +662,51 @@ var SITE_AREAS={AU:"Austin",CC:"Corpus",SA:"San Antonio",TK:"Waco",WA:"Waco",DA:
 function siteArea(id,m){ return SITE_AREAS[String(id||"").slice(0,2)]||(m==="HN"?"Houston":""); }
 function siteList(m){ return (data&&data.sites&&data.sites[m])||[]; }
 function siteField(id){
-  var list=siteList(cur);
-  return '<label>Site ID<input id="'+id+'" type="text" class="mono" list="'+id+'Opts" placeholder="'+(list.length?'Pick or type, e.g. ':'')+MARKETS[cur].sitePh+'" autocomplete="off" autocapitalize="characters" spellcheck="false">'+
-    '<datalist id="'+id+'Opts">'+list.map(function(s){ return '<option value="'+esc(s.id)+'">'+esc(s.area)+'</option>'; }).join("")+'</datalist><span class="hint" id="'+id+'Hint"></span></label>';
+  return '<div class="sfield"><label class="slabel" for="'+id+'">Site ID</label><div class="site-pick"><input id="'+id+'" type="text" class="mono" placeholder="Type the first few characters, e.g. '+MARKETS[cur].sitePh.slice(0,4)+'" autocomplete="off" autocapitalize="characters" spellcheck="false" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="'+id+'List">'+
+    '<div class="site-sugg" id="'+id+'List" role="listbox" hidden></div></div><span class="hint" id="'+id+'Hint"></span></div>';
+}
+/** Sites that start with what was typed. "au2218" also finds AU02218A. */
+function siteMatches(raw){
+  var q=S(raw).toUpperCase().replace(/\s+/g,""), n=normSite(q,cur), out=[];
+  if(q.length<3) return out;
+  siteList(cur).forEach(function(s){ if(s.id.indexOf(q)===0||s.id.indexOf(n)===0) out.push(s); });
+  return out;
+}
+/** What gets saved: an exact site, the only site that starts with what was typed, or a new site. */
+function resolveSite(raw){
+  var n=normSite(raw,cur); if(!n) return {site:""};
+  if(siteList(cur).some(function(s){ return s.id===n; })) return {site:n};
+  var m=siteMatches(raw);
+  if(m.length===1) return {site:m[0].id};
+  if(m.length>1) return {site:"",error:"More than one site starts with "+n+" ("+m.slice(0,4).map(function(s){return s.id;}).join(", ")+(m.length>4?"…":"")+"). Tap the right one."};
+  return {site:n,isNew:true};
 }
 function wireSite(id){
-  var el=document.getElementById(id), h=document.getElementById(id+"Hint");
-  el.addEventListener("input",function(){
-    var raw=S(el.value).toUpperCase(), n=normSite(raw,cur), pre=n&&n!==raw?"Saved as "+n+". ":"";
-    if(!n){ h.className="hint"; h.textContent=""; return; }
-    var hit=siteList(cur).filter(function(s){ return s.id===n; })[0];
-    if(hit){ h.className="hint ok"; h.textContent=pre+(hit.area||"On the site list"); }
-    else if(n.length>=6){ h.className="hint"; h.textContent=pre+"Not on the site list yet. It'll be added."; }
-    else { h.className="hint"; h.textContent=pre; }
-  });
+  var el=document.getElementById(id), h=document.getElementById(id+"Hint"), box=document.getElementById(id+"List");
+  var close=function(){ box.hidden=true; el.setAttribute("aria-expanded","false"); };
+  var pick=function(s){ el.value=s.id; close(); h.className="hint ok"; h.textContent=s.area||"On the site list"; };
+  var update=function(){
+    var raw=S(el.value).toUpperCase(), n=normSite(raw,cur);
+    if(!raw){ close(); h.className="hint"; h.textContent=""; return; }
+    var m=siteMatches(raw), exact=m.filter(function(s){ return s.id===n; })[0];
+    if(exact){ close(); h.className="hint ok"; h.textContent=(exact.id!==raw?exact.id+" · ":"")+(exact.area||"On the site list"); return; }
+    if(m.length){
+      box.innerHTML=m.slice(0,8).map(function(s){ return '<button type="button" role="option" data-site="'+esc(s.id)+'"><span class="mono">'+esc(s.id)+'</span><small>'+esc(s.area)+'</small></button>'; }).join("")+(m.length>8?'<p class="note">'+(m.length-8)+' more. Keep typing.</p>':'');
+      box.hidden=false; el.setAttribute("aria-expanded","true");
+      h.className="hint"; h.textContent=m.length===1?"Tap it, or just keep going. "+m[0].id+" will be used.":plural(m.length,"site")+" match. Tap one.";
+      return;
+    }
+    close();
+    if(raw.length<3){ h.className="hint"; h.textContent=""; return; }
+    h.className="hint"; h.textContent=(n!==raw?"Saved as "+n+". ":"")+(n.length>=7?"Not on the site list. It'll be added as a new site.":"No site starts with that.");
+  };
+  el.addEventListener("input",update);
+  box.addEventListener("click",function(e){ var b=e.target.closest("[data-site]"); if(!b) return; var s=siteList(cur).filter(function(x){ return x.id===b.dataset.site; })[0]; if(s) pick(s); });
+  el.addEventListener("keydown",function(e){ if(e.key==="Escape") close(); });
 }
 
 /* inventory + asset transfer */
-var invFilter="All", invQuery="", receiving=null;
+var invFilter="All", invModel="All", invQuery="", receiving=null;
 function findRadio(sn){ var hit=null; Object.keys(MARKETS).forEach(function(m){ (data[m].inv||[]).forEach(function(r){ if(!hit&&r.sn===sn) hit={m:m,r:r}; }); }); return hit; }
 function findAsset(a,sn){ var hit=null; if(!a||a==="NA") return null; Object.keys(MARKETS).forEach(function(m){ (data[m].inv||[]).forEach(function(r){ if(!hit&&r.asset===a&&r.sn!==sn) hit={m:m,r:r}; }); }); return hit; }
 function movedLine(r){ return (r.by||r.at)? ' · '+(r.by?nameOf(r.by)+', ':'')+(r.at?fmtDate(r.at):'') : ''; }
@@ -674,28 +715,29 @@ function viewInventory(){
   var inv=data[cur].inv, locs=locsFor(cur), truck=myTruck(), rc=receiving&&receiving.m===cur?receiving:null;
   if(invFilter!=="All"&&locs.indexOf(invFilter)<0) invFilter="All";
   app.innerHTML=liveLine()+
-  '<section><div class="sec-h"><h2>'+(rc?'Receive replacement':'Asset Transfer')+'</h2><p>'+(rc?'For '+esc(rc.site)+' (pulled '+esc(rc.badSn)+')':'Pick up a radio, move it to your truck, or ship it')+'</p></div>'+
+  '<section><div class="sec-h"><h2>'+(rc?'Receive replacement':'Asset Transfer')+'</h2><p>'+(rc?'For '+esc(rc.site)+' (pulled '+esc(rc.badSn)+')':'Pick up a radio or move it to your truck')+'</p></div>'+
   (rc?'<div class="banner info">Scan the new radio that came in. It goes into inventory and the order is marked received. <button class="linkbtn" type="button" id="rcCancel">Cancel</button></div>':'')+
   '<form id="xfForm" novalidate><div class="f2">'+
     scanField("xfSn","Radio serial","serial",false)+
     '<label>Radio<select id="xfModel"><option value="">Choose radio</option>'+data.models.map(function(m){return '<option'+(rc&&rc.model===m?' selected':'')+'>'+esc(m)+'</option>';}).join("")+'</select><span class="hint" id="xfModelHint">Filled in from the scan</span></label>'+
     '<div>'+scanField("xfAsset","T-Mobile asset tag","asset",true)+'<label class="check sm"><input id="xfNoTag" type="checkbox"> No asset tag on this radio</label></div>'+
-    '<fieldset class="dest"><legend>Move it to</legend><div class="seg seg3">'+
+    '<fieldset class="dest"><legend>Move it to</legend><div class="seg">'+
       '<label><input type="radio" name="xfDest" value="TRUCK"'+(truck?' checked':' disabled')+'><span>My truck<small>'+(truck?esc(title(truck)):'None on Team tab')+'</small></span></label>'+
       '<label><input type="radio" name="xfDest" value="SHOP"'+(truck?'':' checked')+'><span>Shop<small>'+esc(title(MARKETS[cur].store))+'</small></span></label>'+
-      (rc?'':'<label><input type="radio" name="xfDest" value="TELLWORKS"><span>Tellworks<small>Ship it out</small></span></label>')+
+
     '</div></fieldset>'+
     '<label id="xfRmaL" hidden>RMA #<input id="xfRma" type="text" class="mono" placeholder="If you have one" autocomplete="off" autocapitalize="characters"><span class="hint">Ship date is saved automatically</span></label>'+
   '</div><div id="xfErr" class="formerr" hidden></div><div class="actions"><button class="btn red" type="submit" id="xfBtn">'+(rc?'Receive':'Transfer')+'</button></div></form></section>'+
-  (inv?'<section><div class="sec-h"><h2>'+esc(MARKETS[cur].name)+' inventory</h2><p id="invCount"></p></div><div class="controls"><div class="srow"><input class="search mono" id="invSearch" type="text" placeholder="Search or check a serial, asset or site" aria-label="Search or check a radio" value="'+esc(invQuery)+'" autocomplete="off" autocapitalize="characters">'+scanButton("invSearch","any")+'</div><div id="chkOut"></div><div class="chips" id="invChips"></div></div><div class="list" id="invList"></div></section>'
+  (inv?'<section><div class="sec-h"><h2>'+esc(MARKETS[cur].name)+' inventory</h2><p id="invCount"></p></div><div class="controls"><div class="srow"><input class="search mono" id="invSearch" type="text" placeholder="Search or check a serial, asset or site" aria-label="Search or check a radio" value="'+esc(invQuery)+'" autocomplete="off" autocapitalize="characters">'+scanButton("invSearch","any")+'</div><div id="chkOut"></div><div class="filters2"><label>Location<select id="invLocSel"></select></label><label>Radio type<select id="invModelSel"></select></label></div></div><div class="list" id="invList"></div></section>'
      :'<section><div class="state"><h2>No '+esc(MARKETS[cur].name)+' inventory yet</h2><p>Scan the first radio in with Asset Transfer above.</p></div></section>');
   wireScan(app);
   var $=function(id){ return document.getElementById(id); };
   if(rc) $("rcCancel").onclick=function(){ receiving=null; render(); };
-  scanHooks.invSearch=function(r){ var s=$("invSearch"); s.value=r.value; invQuery=r.value; invFilter="All"; drawInv(); drawCheck(); };
+  scanHooks.invSearch=function(r){ var s=$("invSearch"); s.value=r.value; invQuery=r.value; invFilter="All"; invModel="All"; drawInv(); drawCheck(); };
   if(inv){ drawInv(); drawCheck();
     var s=$("invSearch"); s.addEventListener("input",function(){ var p=parseScan(s.value); if(p) s.value=p.sn; invQuery=s.value; drawInv(); drawCheck(); });
-    $("invChips").addEventListener("click",function(e){ var b=e.target.closest(".chip"); if(!b) return; invFilter=b.dataset.f; drawInv(); });
+    $("invLocSel").addEventListener("change",function(){ invFilter=$("invLocSel").value; drawInv(); });
+    $("invModelSel").addEventListener("change",function(){ invModel=$("invModelSel").value; drawInv(); });
     $("invList").addEventListener("change",onMove);
     $("invList").addEventListener("click",onReportBad); }
   [].forEach.call(document.querySelectorAll('input[name="xfDest"]'),function(x){ x.addEventListener("change",function(){ $("xfRmaL").hidden=x.value!=="TELLWORKS"||!x.checked; }); });
@@ -735,8 +777,12 @@ function viewInventory(){
 }
 function drawInv(){
   var inv=data[cur].inv; if(!inv||!document.getElementById("invList")) return; var locs=locsFor(cur), q=SN(invQuery), other=cur==="AU"?"HN":"AU";
-  document.getElementById("invChips").innerHTML=["All"].concat(locs.filter(function(l){return inv.some(function(r){return r.loc===l;});})).map(function(f){ var n=f==="All"?inv.length:inv.filter(function(r){return r.loc===f;}).length; return '<button type="button" class="chip" data-f="'+esc(f)+'" aria-pressed="'+(f===invFilter)+'">'+esc(f==="All"?"All":title(f))+' '+n+'</button>'; }).join("");
-  var list=inv.filter(function(r){ return (invFilter==="All"||r.loc===invFilter)&&(!q||r.sn.indexOf(q)>=0||(r.asset||"").indexOf(q)>=0||(r.site||"").indexOf(q)>=0||(r.rma||"").toUpperCase().indexOf(q)>=0); }).sort(function(a,b){return a.model.localeCompare(b.model)||a.sn.localeCompare(b.sn);});
+  var models=[]; inv.forEach(function(r){ if(models.indexOf(r.model)<0) models.push(r.model); }); models.sort();
+  if(invModel!=="All"&&models.indexOf(invModel)<0) invModel="All";
+  var inLoc=function(r){ return invFilter==="All"||r.loc===invFilter; }, inModel=function(r){ return invModel==="All"||r.model===invModel; };
+  document.getElementById("invLocSel").innerHTML=["All"].concat(locs.filter(function(l){return inv.some(function(r){return r.loc===l;});})).map(function(f){ var n=inv.filter(function(r){ return (f==="All"||r.loc===f)&&inModel(r); }).length; return '<option value="'+esc(f)+'"'+(f===invFilter?' selected':'')+'>'+esc(f==="All"?"All locations":title(f))+' ('+n+')</option>'; }).join("");
+  document.getElementById("invModelSel").innerHTML=["All"].concat(models).map(function(md){ var n=inv.filter(function(r){ return (md==="All"||r.model===md)&&inLoc(r); }).length; return '<option value="'+esc(md)+'"'+(md===invModel?' selected':'')+'>'+esc(md==="All"?"All radios":md)+' ('+n+')</option>'; }).join("");
+  var list=inv.filter(function(r){ return inLoc(r)&&inModel(r)&&(!q||r.sn.indexOf(q)>=0||(r.asset||"").indexOf(q)>=0||(r.site||"").indexOf(q)>=0||(r.rma||"").toUpperCase().indexOf(q)>=0); }).sort(function(a,b){return a.model.localeCompare(b.model)||a.sn.localeCompare(b.sn);});
   document.getElementById("invCount").textContent=list.length+" of "+plural(inv.length,"radio");
   document.getElementById("invList").innerHTML=list.length? list.map(function(r){
     var pill=r.status==="GOOD"?'<span class="pill good">Good</span>':'<span class="pill bad">'+esc(title(r.status))+'</span>';
@@ -766,7 +812,7 @@ function onMove(e){
 function onReportBad(e){
   var b=e.target.closest("[data-report]"); if(!b) return;
   var sn=b.dataset.report;
-  var o=scanOverlay('<h3>Report '+esc(sn)+' bad</h3><p>It stays where it is, marked bad so nobody installs it. Ship it with Asset Transfer → Tellworks.</p>'+
+  var o=scanOverlay('<h3>Report '+esc(sn)+' bad</h3><p>It stays where it is, marked bad so nobody installs it. A manager sends it to Tellworks.</p>'+
     '<label>What\'s wrong<select id="rbWhy"><option value="">Choose reason</option><option>Dead on arrival</option>'+REASONS.map(function(r){return '<option>'+esc(r)+'</option>';}).join("")+'</select></label>'+
     '<span class="hint err" id="rbErr"></span><div class="actions"><button class="btn red" type="button" data-act="ok">Mark bad</button><button class="btn quiet" type="button" data-act="cancel">Cancel</button></div>');
   o.querySelector('[data-act="cancel"]').onclick=closeScan;
@@ -800,10 +846,15 @@ function viewInstall(){
     siteField("inSite")+
     '<label id="inModelL" hidden>Radio<select id="inModel"><option value="">Choose radio</option>'+data.models.map(function(m){return '<option>'+esc(m)+'</option>';}).join("")+'</select><span class="hint">Not in inventory yet, so it\'s added as installed</span></label>'+
     '<div id="inAssetW" hidden>'+scanField("inAsset","T-Mobile asset tag","asset",true)+'</div>'+
-  '</div><div id="inErr" class="formerr" hidden></div><div class="actions"><button class="btn red" type="submit" id="inBtn">Install</button></div></form></section>'+
+  '</div><div class="photos"><label>Serial tag photo (required)<input id="inPh" type="file" accept="image/*" capture="environment" hidden><span class="btn quiet sm" role="button" tabindex="0" id="inPhB">Add photo</span><img class="thumb" id="inPhP" alt="Serial tag photo" hidden><span class="hint" id="inPhH">Comes from your scan, or tap to take one</span></label></div>'+
+  '<div id="inErr" class="formerr" hidden></div><div class="actions"><button class="btn red" type="submit" id="inBtn">Install</button></div></form></section>'+
   '<section id="instSec"></section>';
   wireScan(app);
-  var $=function(id){return document.getElementById(id);}, scanRaw="";
+  var $=function(id){return document.getElementById(id);}, scanRaw="", inPhoto="";
+  var setPh=function(b64,fromScan){ inPhoto=b64; $("inPhP").src="data:image/jpeg;base64,"+b64; $("inPhP").hidden=false; $("inPhB").textContent="Replace photo"; $("inPhH").className="hint ok"; $("inPhH").textContent=fromScan?"From your scan":"Photo added"; };
+  var openPh=function(e){ if(e) e.preventDefault(); $("inPh").click(); };
+  $("inPhB").addEventListener("click",openPh); $("inPhB").addEventListener("keydown",function(e){ if(e.key==="Enter"||e.key===" ") openPh(e); });
+  $("inPh").addEventListener("change",function(){ var f=$("inPh").files[0]; if(!f) return; shrink(f).then(function(d){ setPh(d,false); }).catch(function(){ toast("That photo couldn't be read. Try another."); }); });
   var check=function(){ var sn=SN($("inSn").value), h=$("inSnHint"); if(!sn) return;
     var hit=findRadio(sn), isNew=!hit;
     $("inModelL").hidden=!isNew; $("inAssetW").hidden=!isNew;
@@ -812,16 +863,17 @@ function viewInstall(){
     else if(hit.r.loc==="SITE"){ h.className="hint err"; h.textContent="Already installed"+(hit.r.site?" at "+hit.r.site:"")+"."; }
     else if(hit.r.status!=="GOOD"){ h.className="hint err"; h.textContent="Marked bad. Pick a good spare."; }
     else { h.className="hint ok"; h.textContent=hit.r.model+" · from "+title(hit.r.loc); } };
-  scanHooks.inSn=function(r){ scanRaw=r.raw||""; check(); if(r.model) $("inModel").value=r.model; };
+  scanHooks.inSn=function(r){ scanRaw=r.raw||""; check(); if(r.model) $("inModel").value=r.model; if(r.photo) setPh(r.photo,true); };
   scanHooks["inSn:mode"]=function(){ scanRaw=""; };
   $("inSn").addEventListener("input",check);
   wireSite("inSite");
   $("inForm").addEventListener("submit",function(e){ e.preventDefault();
     var err=$("inErr"), show=function(m){ err.hidden=false; err.textContent=m; err.scrollIntoView({block:"center",behavior:"smooth"}); };
-    var sf=fieldVal("inSn","serial number"), af=fieldVal("inAsset","asset tag"), sn=sf.value, site=normSite($("inSite").value,cur);
+    var sf=fieldVal("inSn","serial number"), af=fieldVal("inAsset","asset tag"), sn=sf.value, rs=resolveSite($("inSite").value), site=rs.site;
     err.hidden=true;
     if(!sn) return show("Scan the radio you're installing."); if(sf.error) return show(sf.error); if(af.error) return show(af.error);
     if(!/^[A-Z0-9]{6,20}$/.test(sn)) return show("Serials use only letters and numbers.");
+    if(rs.error) return show(rs.error);
     if(!site) return show("Add the site ID.");
     var hit=findRadio(sn), d={as:asWho(),sn:sn,site:site,typed:typedList([[sf,"serial"],[af,"asset tag"]])};
     if(hit){
@@ -833,6 +885,8 @@ function viewInstall(){
       if(!d.model) return show("Choose the radio model. "+sn+" isn't in inventory yet, so it'll be added.");
       var dupA=findAsset(d.asset,sn); if(dupA) return show("Asset tag "+d.asset+" is already on radio "+dupA.r.sn+". Check the tag.");
     }
+    if(!inPhoto) return show("Add a photo of the serial tag. Scanning takes one for you, or tap Add photo.");
+    d.photo={data:inPhoto,mime:"image/jpeg"};
     var btn=$("inBtn"); btn.disabled=true; btn.textContent="Saving…";
     save("installRadio",[token,cur,d],sn+" at "+site).then(function(r){ savedMsg(r,sn+" installed at "+site); return load(true).then(function(){ render(); }); })
       .catch(function(e2){ if(isAuthErr(e2)) return signedOut("Sign in again to continue."); show(errText(e2)); btn.disabled=false; btn.textContent="Install"; });
@@ -858,7 +912,7 @@ function drawInstalledList(){
     var here=tags.filter(function(t){ return r.site&&t.site===r.site; });
     var hist=here.length? '<div class="hist">Red tags at this site: '+here.slice(0,3).map(function(t){ return '<span class="mono">'+esc(t.badSn)+'</span> '+esc(fmtDate(t.date)); }).join(" · ")+(here.length>3?' · +'+(here.length-3)+' more':'')+'</div>' : '';
     return '<div class="row inst"><div class="main"><span class="site-id">'+esc(r.site||"No site")+'</span><span class="model">'+esc(r.model)+'</span><span class="mono">'+esc(r.sn)+'</span></div>'+
-      '<div class="sub"><span>'+(r.at?'Installed '+fmtDate(r.at):'Install date not recorded')+(r.by?' by '+esc(nameOf(r.by)):'')+'</span>'+(r.asset&&r.asset!=="NA"?'<span class="mono">'+esc(r.asset)+'</span>':'')+'</div>'+hist+'</div>'; }).join("")
+      '<div class="sub"><span>'+(r.at?'Installed '+fmtDate(r.at):'Install date not recorded')+(r.by?' by '+esc(nameOf(r.by)):'')+(r.photo?' · <a href="'+esc(r.photo)+'" target="_blank" rel="noopener">Photo</a>':'')+'</span>'+(r.asset&&r.asset!=="NA"?'<span class="mono">'+esc(r.asset)+'</span>':'')+'</div>'+hist+'</div>'; }).join("")
     : '<div class="empty">'+(q?'No installs match.':'Nothing installed yet. Installs show up here.')+'</div>';
 }
 
@@ -960,7 +1014,7 @@ function barRegions(lum,W,H){
     var o=y*w+x, gx=(sm[o+1]-sm[o-1])*2+(sm[o-w+1]-sm[o-w-1])+(sm[o+w+1]-sm[o+w-1]), gy=(sm[o+w]-sm[o-w])*2+(sm[o+w-1]-sm[o-w-1])+(sm[o+w+1]-sm[o-w+1]), t=ty*tw+tx;
     j11[t]+=gx*gx; j22[t]+=gy*gy; j12[t]+=gx*gy; }
   var en=[], tiles=[], k; for(k=0;k<th*tw;k++) en.push(j11[k]+j22[k]);
-  var sorted=en.slice().sort(function(a,b){return a-b;}), cut=sorted[Math.floor(sorted.length*0.8)]||0;
+  var sorted=en.slice().sort(function(a,b){return a-b;}), cut=sorted[Math.floor(sorted.length*(barRegions.cut||0.8))]||0;
   for(k=0;k<th*tw;k++){ var e=en[k]+1e-6, coh=Math.sqrt((j11[k]-j22[k])*(j11[k]-j22[k])+4*j12[k]*j12[k])/e;
     if(coh>0.75&&en[k]>cut) tiles.push({x:((k%tw)+0.5)*T/s, y:(Math.floor(k/tw)+0.5)*T/s, a:0.5*Math.atan2(2*j12[k],j11[k]-j22[k]), e:en[k]}); }
   var bins=new Float64Array(36); tiles.forEach(function(t){ bins[Math.floor(((t.a*180/Math.PI)+90)%180/5)%36]+=t.e; });
@@ -1012,6 +1066,40 @@ function readSlanted(lum,W,H){
     });
   });
   readSlanted.lastVotes=votes;
+  return Object.keys(votes).sort(function(a,b){ return votes[b]-votes[a]; });
+}
+/** T-Mobile asset tags are magenta: find the pink stickers first, then read each one up close at full detail.
+ *  rgba: canvas ImageData.data (or any RGBA bytes), W×H at full camera/photo resolution. */
+function pinkBlobs(rgba,W,H){
+  var st=Math.max(2,Math.round(Math.max(W,H)/400)), gw=Math.ceil(W/st), gh=Math.ceil(H/st), m=new Uint8Array(gw*gh), x, y;
+  for(y=0;y<gh;y++) for(x=0;x<gw;x++){ var o=((y*st)*W+(x*st))*4, r=rgba[o], g=rgba[o+1], b=rgba[o+2];
+    if(r>45&&r-g>Math.max(25,0.3*r)&&b-g>0.06*r&&r>=b-20) m[y*gw+x]=1; }
+  var seen=new Uint8Array(gw*gh), blobs=[];
+  for(var i=0;i<m.length;i++){ if(!m[i]||seen[i]) continue;
+    var q=[i], x0=1e9,y0=1e9,x1=-1,y1=-1,n=0; seen[i]=1;
+    while(q.length){ var k=q.pop(), kx=k%gw, ky=(k/gw)|0; n++; if(kx<x0)x0=kx; if(kx>x1)x1=kx; if(ky<y0)y0=ky; if(ky>y1)y1=ky;
+      for(var dy=-2;dy<=2;dy++) for(var dx=-2;dx<=2;dx++){ var nx=kx+dx, ny=ky+dy; if(nx<0||ny<0||nx>=gw||ny>=gh) continue; var j=ny*gw+nx; if(m[j]&&!seen[j]){ seen[j]=1; q.push(j); } } }
+    if(n>=12) blobs.push({x0:x0*st,y0:y0*st,x1:(x1+1)*st,y1:(y1+1)*st,n:n}); }
+  return blobs.sort(function(a,b){ return b.n-a.n; }).slice(0,3);
+}
+function readPink(rgba,W,H){
+  var votes={};
+  pinkBlobs(rgba,W,H).forEach(function(b){
+    if(Object.keys(votes).some(function(k){ return votes[k]>=3; })) return;
+    var pw=b.x1-b.x0, ph=b.y1-b.y0, pad=Math.max(pw,ph)*0.12;
+    var x0=Math.max(0,Math.floor(b.x0-pad)), y0=Math.max(0,Math.floor(b.y0-pad)), x1=Math.min(W,Math.ceil(b.x1+pad)), y1=Math.min(H,Math.ceil(b.y1+pad));
+    var cw=x1-x0, ch=y1-y0; if(cw<20||ch<20) return;
+    // up close: long side 900–1400px so the thin bars get enough pixels
+    var sc=Math.max(cw,ch)<900? 900/Math.max(cw,ch) : Math.min(1,1400/Math.max(cw,ch)), w=Math.max(8,Math.round(cw*sc)), h=Math.max(8,Math.round(ch*sc)), L=new Uint8Array(w*h);
+    for(var yy=0;yy<h;yy++){ var sy=y0+(yy+0.5)/sc-0.5; sy=sy<0?0:sy>H-1.001?H-1.001:sy; var iy=sy|0, fy=sy-iy;
+      for(var xx=0;xx<w;xx++){ var sx=x0+(xx+0.5)/sc-0.5; sx=sx<0?0:sx>W-1.001?W-1.001:sx; var ix=sx|0, fx=sx-ix, o=(iy*W+ix)*4, o2=o+W*4;
+        var a=Math.max(rgba[o],rgba[o+1],rgba[o+2]), b2=Math.max(rgba[o+4],rgba[o+5],rgba[o+6]), c=Math.max(rgba[o2],rgba[o2+1],rgba[o2+2]), d=Math.max(rgba[o2+4],rgba[o2+5],rgba[o2+6]);
+        L[yy*w+xx]=(a*(1-fx)+b2*fx)*(1-fy)+(c*(1-fx)+d*fx)*fy; } }
+    barRegions.cut=0.45; try{ readSlanted(L,w,h); } finally { barRegions.cut=0; } var v=readSlanted.lastVotes||{};
+    readPink.lastCrop={L:L,w:w,h:h};
+    Object.keys(v).forEach(function(k){ votes[k]=(votes[k]||0)+v[k]; });
+  });
+  readPink.lastVotes=votes;
   return Object.keys(votes).sort(function(a,b){ return votes[b]-votes[a]; });
 }
 
@@ -1126,6 +1214,8 @@ function pickFrom(found,kind){
     if(p.code&&!code){ code=p.code; model=p.model; }
     if(p.asset&&assets.indexOf(p.asset)<0) assets.push(p.asset);
   });
+  // an asset tag that doesn't start with TM still counts when it's the only other barcode found
+  if(kind==="asset"&&!assets.length) found.forEach(function(p){ if(p.other&&assets.indexOf(p.other)<0) assets.push(p.other); });
   var list= kind==="serial"? serials : kind==="asset"? assets : serials.concat(assets);
   return {value:list[0]||"",choices:list,model:model,code:code,raw:raw};
 }
@@ -1141,6 +1231,7 @@ function readBarcodes(file,kind){
     steps.push(zw(function(Z){ return zwRead(Z,cutData(img,0,0,W,H,2400)).then(add); }));
     steps.push(zw(function(Z){ return zwRead(Z,enhanceData(cutData(img,0,0,W,H,2400))).then(add); }));
     // pink T-Mobile asset tags: tilted Code 128 that washes out in grayscale, read with the slanted-line reader
+    if(kind!=="serial") steps.push(function(){ try{ var pd=cutData(img,0,0,W,H,2400); add(readPink(pd.data,pd.width,pd.height).map(function(t){ return {text:t}; })); }catch(e){} });
     if(kind!=="serial") steps.push(function(){ var id=cutData(img,0,0,W,H,2400), w=id.width, h=id.height, d=id.data, L=new Uint8Array(w*h);
       for(var q=0,o=0;q<L.length;q++,o+=4){ L[q]=Math.max(d[o],d[o+1],d[o+2]); }
       try{ add(readSlanted(L,w,h).map(function(t){ return {text:t}; })); }catch(e){} });
@@ -1262,7 +1353,6 @@ function wireScan(root){
   }); });
 }
 var zxWarm=false;
-
 /* ---------- live camera scanning (home-screen app only) ---------- */
 // Google blocks the camera inside its own pages, so there the app falls back to snapping a photo.
 var LIVE_OK=!!(window.isSecureContext&&navigator.mediaDevices&&navigator.mediaDevices.getUserMedia)&&!(window.google&&google.script&&google.script.run);
@@ -1338,13 +1428,15 @@ function startLive(kind,cb){
     if(!v||v.readyState<2||!v.videoWidth){ L.t=setTimeout(tick,120); return; }
     // read the whole frame (cropping can cut the bars the slanted reader needs to find the tag)
     // digital zoom reads the middle of the frame at full detail
-    var z=L.nativeZoom?1:L.zoom, vw=v.videoWidth/z, vh=v.videoHeight/z, sx=(v.videoWidth-vw)/2, sy=(v.videoHeight-vh)/2, s=Math.min(1,1600/Math.max(vw,vh));
+    var z=L.nativeZoom?1:L.zoom, vw=v.videoWidth/z, vh=v.videoHeight/z, sx=(v.videoWidth-vw)/2, sy=(v.videoHeight-vh)/2, s=Math.min(1,1920/Math.max(vw,vh));
     cv.width=Math.round(vw*s); cv.height=Math.round(vh*s);
     g.drawImage(v,sx,sy,vw,vh,0,0,cv.width,cv.height);
     var id=g.getImageData(0,0,cv.width,cv.height); L.n++;
     var jobs=[];
     if(nativeDet) jobs.push(function(){ return nativeDet.detect(cv).then(function(rs){ add(rs.map(function(r){ return {text:r.rawValue}; })); },function(){}); });
     if(zwPromise) jobs.push(function(){ return zwPromise.then(function(Z){ return zwRead(Z,id).then(add); }).catch(function(){}); });
+    // pink asset tags: find the pink sticker and read it up close; every other frame also try the whole picture
+    if(kind!=="serial") jobs.push(function(){ try{ add(readPink(id.data,id.width,id.height).map(function(t){ return {text:t}; })); }catch(e){} });
     if(kind!=="serial"&&L.n%2===0) jobs.push(function(){ var d=id.data, Lm=new Uint8Array(id.width*id.height);
       for(var q=0,o2=0;q<Lm.length;q++,o2+=4) Lm[q]=Math.max(d[o2],d[o2+1],d[o2+2]);
       try{ add(readSlanted(Lm,id.width,id.height).map(function(t){ return {text:t}; })); }catch(e){} });
@@ -1375,7 +1467,7 @@ function logFormHtml(){
       scanField("lAsset","T-Mobile asset tag","asset",true)+
     '</div>'+
     '<label class="check"><input id="lBox" type="checkbox"> Bad out of the box (new radio failed on install)</label><p class="note">The pulled radio moves to '+esc(myTruck()?title(myTruck()):title(MARKETS[cur].store))+', marked bad, ready to ship to Tellworks.</p>'+
-    '<label>Alarm notes<textarea id="lNotes" placeholder="TX out of order on ports 3 & 4, water intrusion, VSWR…"></textarea></label>'+
+    '<label>Alarm notes (required)<textarea id="lNotes" placeholder="TX out of order on ports 3 & 4, water intrusion, VSWR…"></textarea></label>'+
     '<div class="photos">'+
       '<label>Pulled radio serial tag<input id="ph1" type="file" accept="image/*" hidden><span class="btn quiet sm" role="button" tabindex="0" data-for="ph1" id="ph1b">Add photo</span><img class="thumb" id="ph1p" alt="Pulled radio label photo" hidden><span class="hint" id="ph1h"></span></label>'+
     '</div>'+
@@ -1392,10 +1484,11 @@ function wireLogForm(){
   ["ph1"].forEach(function(id){ $(id).addEventListener("change",function(){ var f=$(id).files[0]; if(!f) return; shrink(f).then(function(d){ setPhoto(id,d,false); }).catch(function(){ toast("That photo couldn't be read. Try another."); }); }); });
   $("logForm").addEventListener("submit",function(e){ e.preventDefault();
     var err=$("logErr"), show=function(m){ err.hidden=false; err.textContent=m; err.scrollIntoView({block:"center",behavior:"smooth"}); };
-    var site=normSite($("lSite").value,cur), tk=S($("lTicket").value).toUpperCase(), ticket=/^\d+$/.test(tk)?"INC"+tk:tk, model=$("lModel").value;
+    var rs=resolveSite($("lSite").value), site=rs.site, tk=S($("lTicket").value).toUpperCase(), ticket=/^\d+$/.test(tk)?"INC"+tk:tk, model=$("lModel").value;
     var bf=fieldVal("lBad","bad radio serial"), af=fieldVal("lAsset","asset tag");
     var reason=$("lReason").value, box=$("lBox").checked, badSn=bf.value, notes=S($("lNotes").value), asset=af.value;
-    var miss=[]; if(!site) miss.push("site ID"); if(!ticket) miss.push("ticket number"); if(!model) miss.push("radio"); if(!badSn) miss.push("bad radio serial"); if(!reason) miss.push("failure reason");
+    var miss=[]; if(!site) miss.push("site ID"); if(!ticket) miss.push("ticket number"); if(!model) miss.push("radio"); if(!badSn) miss.push("bad radio serial"); if(!reason) miss.push("failure reason"); if(!S($("lNotes").value)) miss.push("alarm notes");
+    if(rs.error) return show(rs.error);
     if(miss.length) return show("Add "+miss.join(", ")+".");
     var ferr=bf.error||af.error; if(ferr) return show(ferr);
     if(!/^[A-Z0-9]{6,20}$/.test(badSn)) return show("Serials use only letters and numbers, at least 6 characters.");
