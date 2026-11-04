@@ -6,7 +6,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Serracom">
-<meta name="theme-color" content="#00456F">
+<meta name="theme-color" content="#00456F" id="themeColor">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="icon" type="image/png" href="icon-192.png">
@@ -31,6 +31,8 @@
   --gut-r:max(16px, env(safe-area-inset-right, 0px));
   color-scheme:light;
 }
+/* AU uses forest green + orange so it's obvious which market you're in. HN keeps Serracom navy + orange. */
+html[data-mkt="AU"]{--brand:#1F5A32;--brand-hd:#1F5A32;--head:#1F5A32;--chart:#1F5A32}
 
 *{box-sizing:border-box}
 body{background:var(--bg);color:var(--ink);font:15px/1.5 var(--body);
@@ -52,7 +54,7 @@ header.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background
 .top-in .sp{flex:1}
 .mkt{display:inline-grid;grid-template-columns:1fr 1fr;background:rgba(255,255,255,.14);border-radius:10px;padding:3px;gap:3px}
 .mkt button{border:0;background:none;border-radius:8px;padding:6px 12px;font-size:13px;font-weight:600;color:rgba(255,255,255,.85);cursor:pointer;white-space:nowrap}
-.mkt button[aria-pressed="true"]{background:#fff;color:#00456F;box-shadow:0 1px 2px rgba(0,0,0,.12)}
+.mkt button[aria-pressed="true"]{background:#fff;color:var(--brand-hd);box-shadow:0 1px 2px rgba(0,0,0,.12)}
 
 main{max-width:880px;margin:0 auto;padding-top:14px;display:grid;gap:22px}
 .live{display:flex;gap:8px 12px;align-items:center;flex-wrap:wrap;font-size:13px;color:var(--muted)}
@@ -1554,7 +1556,8 @@ var VIEWS={dashboard:viewDashboard,inventory:viewInventory,install:viewInstall,t
 var curView="dashboard";
 function go(v){ if(v==="log") v="tags"; if(v==="spares") v="inventory"; if(!VIEWS[v]) v="dashboard"; curView=v; [].forEach.call(document.querySelectorAll(".tabs button"),function(b){ b.setAttribute("aria-current",b.dataset.view===v?"page":"false"); }); render(); window.scrollTo(0,0); }
 document.querySelector(".tabs").addEventListener("click",function(e){ var b=e.target.closest("button[data-view]"); if(b&&state.phase!=="signin") go(b.dataset.view); });
-function paintMarket(){ [].forEach.call(document.querySelectorAll("#mktSwitch button"),function(b){ b.setAttribute("aria-pressed",b.dataset.m===cur); }); }
+function paintMarket(){ [].forEach.call(document.querySelectorAll("#mktSwitch button"),function(b){ b.setAttribute("aria-pressed",b.dataset.m===cur); });
+  document.documentElement.setAttribute("data-mkt",cur); var tc=document.getElementById("themeColor"); if(tc) tc.setAttribute("content",cur==="AU"?"#1F5A32":"#00456F"); }
 document.getElementById("mktSwitch").addEventListener("click",function(e){ var b=e.target.closest("button[data-m]"); if(!b||b.dataset.m===cur) return; cur=b.dataset.m; store.set("rtt-market",cur); paintMarket(); render(); });
 paintMarket();
 go("dashboard");
