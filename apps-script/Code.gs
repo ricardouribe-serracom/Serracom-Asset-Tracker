@@ -26,7 +26,7 @@ var PHOTO_FOLDER = 'Serracom Inventory Tracker Photos';
 var INV_HEADERS = ['STATUS', 'RADIO', 'NOTES', 'LOCATION', 'SERIAL NUMBER', 'SCANNED SN', 'ASSET NUMBER', 'SCANNED ASSET', 'DATE OF SCAN', 'PRODUCT CODE', 'LAST MOVED BY', 'LAST MOVED'];
 var MOVE_HEADERS = ['Timestamp', 'Transfer Location', 'Serial Number', 'Serial Number Picture', 'Asset Number', 'Asset Number Picture', 'Notes', 'Site ID if Installed', 'Radio Name', 'RADIO', 'MOVED BY'];
 var SESSION_DAYS = 120;
-var APP_VERSION = '2026-11-03';
+var APP_VERSION = '2026-11-04';
 var SETTINGS_TAB = 'Settings';
 var SITES_TAB = 'Sites';
 var SITE_AREAS = { AU: 'Austin', CC: 'Corpus', SA: 'San Antonio', TK: 'Waco', WA: 'Waco', DA: 'Dallas' };
@@ -294,10 +294,40 @@ function setOrdered(token, market, tagRow, badSn, value) {
     b.sh.getRange(b.r, b.boxCol).setValue(!!value);
     b.sh.getRange(b.r, ensureCol_(b.sh, 'ORDER MARKED BY')).setValue(value ? user.email + ' · ' + stamp_(ss) : '');
     if (value) b.sh.getRange(b.r, ensureCol_(b.sh, 'ORDERED ON')).setValue(new Date());
-    return JSON.stringify({ ok: true, row: b.r });
+    var moved = orderToTellworks_(ss, user, c, b, badSn, !!value);
+    return JSON.stringify({ ok: true, row: b.r, moved: moved });
   } finally {
     lock.releaseLock();
   }
+}
+/**
+ * Order submitted: the pulled radio goes to Tellworks. Undo puts it back where it was.
+ * Where it was is kept in the PRE-TELLWORKS LOCATION column on the Bad Radios tab.
+ */
+function orderToTellworks_(ss, user, c, b, badSn, value) {
+  var sh = ss.getSheetByName(c.inv);
+  if (!sh) return '';
+  var col = function (n) { return invCol_(sh, n); }, r = findSerialRow_(sh, badSn, col('SERIAL NUMBER') - 1);
+  if (r < 2) return '';
+  var prevCol = ensureCol_(b.sh, 'PRE-TELLWORKS LOCATION');
+  var loc = String(sh.getRange(r, col('LOCATION')).getValue()).trim().toUpperCase(), model = sh.getRange(r, col('RADIO')).getValue();
+  if (value) {
+    if (loc === 'TELLWORKS') return '';
+    b.sh.getRange(b.r, prevCol).setValue(loc);
+    sh.getRange(r, col('LOCATION')).setValue('TELLWORKS');
+    sh.getRange(r, col('SHIPPED')).setValue(new Date());
+    stampRow_(sh, r, user);
+    logMove_(ss, c, { loc: 'TELLWORKS', sn: norm_(badSn), model: model, by: byLine_(user), notes: 'Order submitted, sent to Tellworks' + (loc ? ', was ' + loc : '') });
+    return 'TELLWORKS';
+  }
+  var prev = String(b.sh.getRange(b.r, prevCol).getValue()).trim();
+  if (loc !== 'TELLWORKS' || !prev) return '';
+  sh.getRange(r, col('LOCATION')).setValue(prev);
+  sh.getRange(r, col('SHIPPED')).setValue('');
+  b.sh.getRange(b.r, prevCol).setValue('');
+  stampRow_(sh, r, user);
+  logMove_(ss, c, { loc: prev, sn: norm_(badSn), model: model, by: byLine_(user), notes: 'Order undone, moved back from Tellworks' });
+  return prev;
 }
 /** The replacement arrived: adds it to inventory and closes out the order. */
 function receiveOrder(token, market, tagRow, badSn, d) {

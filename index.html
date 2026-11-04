@@ -945,7 +945,7 @@ function viewTags(){
     var ch=e.target.closest(".chip"); if(ch){ tagFilter=ch.dataset.f; drawTags(); return; }
     var o=e.target.closest("[data-order]"); if(!o) return;
     var t=data[cur].tags.filter(function(x){return String(x.row)===o.dataset.order;})[0]; if(!t) return; var val=o.dataset.val==="1"; o.disabled=true; o.textContent="Saving…";
-    run("setOrdered",token,cur,t.row,t.badSn,val).then(function(){ toast(val?"Order marked submitted for "+t.site:t.site+" moved back to open"); return load(true); })
+    run("setOrdered",token,cur,t.row,t.badSn,val).then(function(){ toast(val?"Order submitted for "+t.site+". "+t.badSn+" moved to Tellworks":t.site+" moved back to open"); return load(true); })
       .catch(function(err){ if(isAuthErr(err)) return signedOut("Sign in again to continue."); toast(errText(err)); o.disabled=false; o.textContent=val?"Mark order submitted":"Undo"; });
   });
 }
