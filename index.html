@@ -747,6 +747,7 @@ function viewInventory(){
       '<label><input type="radio" name="xfDest" value="SHOP"'+(truck?'':' checked')+'><span>Shop<small>'+esc(title(MARKETS[cur].store))+'</small></span></label>'+
 
     '</div></fieldset>'+
+    '<div class="photos"><label>Serial tag photo (required)<input id="xfPh" type="file" accept="image/*" capture="environment" hidden><span class="btn quiet sm" role="button" tabindex="0" id="xfPhB">Add photo</span><img class="thumb" id="xfPhP" alt="Serial tag photo" hidden><span class="hint" id="xfPhH">Comes from your scan, or tap to take one</span></label></div>'+
     '<label id="xfRmaL" hidden>RMA #<input id="xfRma" type="text" class="mono" placeholder="If you have one" autocomplete="off" autocapitalize="characters"><span class="hint">Ship date is saved automatically</span></label>'+
   '</div><div id="xfErr" class="formerr" hidden></div><div class="actions"><button class="btn red" type="submit" id="xfBtn">'+(rc?'Receive':'Transfer')+'</button></div></form></section>'+
   (inv?'<section><div class="sec-h"><h2>'+esc(MARKETS[cur].name)+' inventory</h2><p id="invCount"></p></div><div class="controls"><div class="srow"><input class="search mono" id="invSearch" type="text" placeholder="Search or check a serial, asset or site" aria-label="Search or check a radio" value="'+esc(invQuery)+'" autocomplete="off" autocapitalize="characters">'+scanButton("invSearch","any")+'</div><div id="chkOut"></div><div class="filters2"><label>Location<select id="invLocSel"></select></label><label>Radio type<select id="invModelSel"></select></label></div></div><div class="list" id="invList"></div></section>'
@@ -763,14 +764,18 @@ function viewInventory(){
     $("invList").addEventListener("click",onReportBad); }
   [].forEach.call(document.querySelectorAll('input[name="xfDest"]'),function(x){ x.addEventListener("change",function(){ $("xfRmaL").hidden=x.value!=="TELLWORKS"||!x.checked; }); });
   $("xfNoTag").addEventListener("change",function(){ if($("xfNoTag").checked) resetField("xfAsset"); });
-  var scanRaw="", errBox=$("xfErr");
+  var scanRaw="", errBox=$("xfErr"), xfPhoto="";
+  var setPh=function(b64,fromScan){ xfPhoto=b64; $("xfPhP").src="data:image/jpeg;base64,"+b64; $("xfPhP").hidden=false; $("xfPhB").textContent="Replace photo"; $("xfPhH").className="hint ok"; $("xfPhH").textContent=fromScan?"From your scan":"Photo added"; };
+  var openPh=function(e){ if(e) e.preventDefault(); $("xfPh").click(); };
+  $("xfPhB").addEventListener("click",openPh); $("xfPhB").addEventListener("keydown",function(e){ if(e.key==="Enter"||e.key===" ") openPh(e); });
+  $("xfPh").addEventListener("change",function(){ var f=$("xfPh").files[0]; if(!f) return; shrink(f).then(function(d){ setPh(d,false); }).catch(function(){ toast("That photo couldn't be read. Try another."); }); });
   var describe=function(){ var sn=SN($("xfSn").value), h=$("xfSnHint"); if(!sn||!h) return;
     var hit=findRadio(sn);
     if(!hit){ h.className="hint ok"; h.textContent="New radio. It will be added to inventory."; return; }
     if(hit.m!==cur){ h.className="hint err"; h.textContent="Listed in "+hit.m+" inventory. Switch to "+hit.m+" at the top to move it."; return; }
     if(hit.r.model&&hit.r.model!=="UNKNOWN") $("xfModel").value=hit.r.model;
     h.className="hint ok"; h.textContent="Now at "+title(hit.r.loc)+(hit.r.site?" ("+hit.r.site+")":"")+(hit.r.status!=="GOOD"?" · marked "+title(hit.r.status).toLowerCase():""); };
-  scanHooks.xfSn=function(r){ scanRaw=r.raw||""; if(r.model) $("xfModel").value=r.model; describe(); };
+  scanHooks.xfSn=function(r){ scanRaw=r.raw||""; if(r.model) $("xfModel").value=r.model; if(r.photo) setPh(r.photo,true); describe(); };
   scanHooks["xfSn:mode"]=function(){ scanRaw=""; };
   scanHooks.xfAsset=function(){ $("xfNoTag").checked=false; };
   $("xfSn").addEventListener("input",describe);
@@ -787,7 +792,8 @@ function viewInventory(){
     if(!hit&&!m) return bad("Choose the radio model.");
     if(!hit&&!a&&!noTag) return bad("Scan the T-Mobile asset tag, or tick \"No asset tag on this radio\".");
     var dupA=findAsset(a,v); if(dupA) return bad("Asset tag "+a+" is already on radio "+dupA.r.sn+". Check the tag.");
-    var d={as:asWho(),sn:v,model:m,asset:a,noAsset:noTag,dest:dest,scan:scanRaw,rma:dest==="TELLWORKS"?S($("xfRma").value):"",typed:typedList([[sf,"serial"],[af,"asset tag"]])};
+    if(!xfPhoto) return bad("Add a photo of the serial tag. Scanning takes one for you, or tap Add photo.");
+    var d={as:asWho(),sn:v,model:m,asset:a,noAsset:noTag,dest:dest,scan:scanRaw,rma:dest==="TELLWORKS"?S($("xfRma").value):"",typed:typedList([[sf,"serial"],[af,"asset tag"]]),photo:{data:xfPhoto,mime:"image/jpeg"}};
     var btn=$("xfBtn"); btn.disabled=true; btn.textContent="Saving…";
     var p= rc? save("receiveOrder",[token,cur,rc.row,rc.badSn,d],"Received "+v+" for "+rc.site) : save("transferRadio",[token,cur,d],v+" to "+title(destName));
     p.then(function(r){

@@ -26,7 +26,7 @@ var PHOTO_FOLDER = 'Serracom Inventory Tracker Photos';
 var INV_HEADERS = ['STATUS', 'RADIO', 'NOTES', 'LOCATION', 'SERIAL NUMBER', 'SCANNED SN', 'ASSET NUMBER', 'SCANNED ASSET', 'DATE OF SCAN', 'PRODUCT CODE', 'LAST MOVED BY', 'LAST MOVED'];
 var MOVE_HEADERS = ['Timestamp', 'Transfer Location', 'Serial Number', 'Serial Number Picture', 'Asset Number', 'Asset Number Picture', 'Notes', 'Site ID if Installed', 'Radio Name', 'RADIO', 'MOVED BY'];
 var SESSION_DAYS = 120;
-var APP_VERSION = '2026-11-04';
+var APP_VERSION = '2026-11-04b';
 var SETTINGS_TAB = 'Settings';
 var SITES_TAB = 'Sites';
 var SITE_AREAS = { AU: 'Austin', CC: 'Corpus', SA: 'San Antonio', TK: 'Waco', WA: 'Waco', DA: 'Dallas' };
@@ -366,6 +366,7 @@ function badRow_(ss, c, tagRow, badSn) {
  */
 function transferRadio(token, market, d) {
   var ss = book_(), user = actAs_(ss, who_(ss, token), d && d.as), c = market_(market);
+  if (d && d.photo && d.photo.data) d.photoUrl = savePhoto_(d.photo, norm_(d.sn) + ' transfer ' + stamp_(ss));
   var lock = LockService.getScriptLock();
   lock.waitLock(20000);
   try {
@@ -407,12 +408,13 @@ function transfer_(ss, user, c, d) {
     sh.getRange(r, col('RMA #')).setValue(String(d.rma || '').trim().toUpperCase());
     sh.getRange(r, col('SHIPPED')).setValue(new Date());
   }
+  if (d.photoUrl) sh.getRange(r, col('TRANSFER PHOTO')).setValue(d.photoUrl);
   markTyped_(sh, r, d.typed);
   stampRow_(sh, r, user);
   var how = action === 'added' ? 'Added' : 'Moved from ' + from;
   if (dest === 'TELLWORKS') how += ', shipped to Tellworks' + (d.rma ? ' (RMA ' + String(d.rma).trim().toUpperCase() + ')' : '');
   logMove_(ss, c, { loc: dest, sn: sn, model: d.model || sh.getRange(r, col('RADIO')).getValue(), asset: asset === 'NA' ? '' : asset, by: byLine_(user),
-    notes: how + ' (Asset Transfer)' + typedNote_(d.typed) });
+    photo: d.photoUrl || '', notes: how + ' (Asset Transfer)' + typedNote_(d.typed) + (d.photoDropped ? ' · photo dropped (phone storage full)' : '') });
   return { ok: true, action: action, from: from, to: dest, row: r };
 }
 
