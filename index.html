@@ -307,7 +307,7 @@ var REASONS=["Will Not Power Up","Fault/OSS Alarms will not clear","RF Intermitt
 var MARKETS={AU:{name:"AU",store:"AU WAREHOUSE",sitePh:"TK02047"},HN:{name:"HN",store:"HN WAREHOUSE",sitePh:"A3H0170A"}};
 var NOT_SPARE=["SITE","TELLWORKS"];
 var STOCK_ORDER=["AHLOA","AEHC","AHFIG","AHLOB","AHFII","AAFIA","FXFC","FFVV","HBXX"];
-var DEFAULT_MODELS=["AEHC","AAFIA","AHLOA","AHFIG","AHLOB","AHFII","FXFC","FXFB","AVHA","FFVV","HBXX"];
+var DEFAULT_MODELS=["AEHC","AAFIA","AHLOA","AHFIG","AHLOB","AHFII","FXFC","FXFB","AVHA","FFVV","HBXX","FRIG","ABIA","ASIA","AHFIB","ASIK","ABIO"];
 var store={get:function(k){try{return localStorage.getItem(k);}catch(e){return null;}},set:function(k,v){try{localStorage.setItem(k,v);}catch(e){}}};
 var cur=MARKETS[store.get("rtt-market")]?store.get("rtt-market"):"AU";
 var token=store.get("rtt-token")||"", user=null, isMgr=false, team={}, viewAs=store.get("rtt-viewas")||"";

@@ -26,7 +26,7 @@ var PHOTO_FOLDER = 'Serracom Inventory Tracker Photos';
 var INV_HEADERS = ['STATUS', 'RADIO', 'NOTES', 'LOCATION', 'SERIAL NUMBER', 'SCANNED SN', 'ASSET NUMBER', 'SCANNED ASSET', 'DATE OF SCAN', 'PRODUCT CODE', 'LAST MOVED BY', 'LAST MOVED'];
 var MOVE_HEADERS = ['Timestamp', 'Transfer Location', 'Serial Number', 'Serial Number Picture', 'Asset Number', 'Asset Number Picture', 'Notes', 'Site ID if Installed', 'Radio Name', 'RADIO', 'MOVED BY'];
 var SESSION_DAYS = 120;
-var APP_VERSION = '2026-11-04b';
+var APP_VERSION = '2026-11-04c';
 var SETTINGS_TAB = 'Settings';
 var SITES_TAB = 'Sites';
 var SITE_AREAS = { AU: 'Austin', CC: 'Corpus', SA: 'San Antonio', TK: 'Waco', WA: 'Waco', DA: 'Dallas' };
@@ -186,6 +186,7 @@ function teamMember_(ss, email) {
 /* ---------- reads ---------- */
 function getData(token, sitesKey) {
   var ss = book_(), user = who_(ss, token), sk = sitesKey_(ss);
+  addNewModels_(ss);
   var out = { user: user, team: readTeam_(ss).map(function (m) { return { email: m.email, name: m.name, truck: m.truck, market: m.market, role: m.role }; }),
     lookup: readTab_(ss, 'Lookup'), settings: readTab_(ss, SETTINGS_TAB), sites: sitesKey && sitesKey === sk ? null : readTab_(ss, SITES_TAB), sitesKey: sk, markets: {}, locations: {}, models: [], tz: ss.getSpreadsheetTimeZone(), book: ss.getName() };
   Object.keys(MARKETS).forEach(function (m) {
@@ -688,8 +689,9 @@ var TAB_LAYOUT = {
   'AU Inventory Tracker': MOVE_HEADERS,
   'HN Inventory Tracker': MOVE_HEADERS
 };
-var LOOKUP_ROWS = [[474331, 'AHLOA'], [475125, 'AHFIG'], [475910, 'AHLOB'], [475656, 'AHFII'], [475124, 'AEHC'], [474486, 'AAFIA'], [472679, 'FXFC'], [476268, 'AVHA']];
-var RADIO_MODELS = ['AEHC', 'AAFIA', 'AHLOA', 'AHFIG', 'AHLOB', 'AHFII', 'FXFC', 'FXFB', 'AVHA', 'FFVV', 'HBXX'];
+var LOOKUP_ROWS = [[474331, 'AHLOA'], [475125, 'AHFIG'], [475910, 'AHLOB'], [475656, 'AHFII'], [475124, 'AEHC'], [474486, 'AAFIA'], [472679, 'FXFC'], [476268, 'AVHA'],
+  [472569, 'FXFB'], [472704, 'FRIG'], [473096, 'ABIA'], [473095, 'ASIA'], [474216, 'AHFIB'], [474021, 'ASIK'], [475266, 'ABIO']];
+var RADIO_MODELS = ['AEHC', 'AAFIA', 'AHLOA', 'AHFIG', 'AHLOB', 'AHFII', 'FXFC', 'FXFB', 'AVHA', 'FFVV', 'HBXX', 'FRIG', 'ABIA', 'ASIA', 'AHFIB', 'ASIK', 'ABIO'];
 /** Resting stock: how many good spares of each we normally keep. FFVV = FFVV-65C-R2N23 antenna, HBXX = HBXX-3319DS-A2M antenna. */
 var RESTING_STOCK = { AAFIA: 2, AEHC: 5, AHFIG: 8, AHFII: 3, AHLOA: 11, AHLOB: 1, FXFC: 2, FXFB: 0, AVHA: 0, FFVV: 3, HBXX: 1 };
 var MODEL_NAMES = { FFVV: 'FFVV-65C-R2N23 antenna', HBXX: 'HBXX-3319DS-A2M antenna' };
@@ -723,6 +725,41 @@ function applyResting_(ss) {
     else { st.getRange(st.getLastRow() + 1, 1, 1, 3).setValues([row]); have.push(row[0]); }
   });
   st.getRange('E1').setValue('Resting stock: how many good spares we normally keep. Overview shows on hand / resting stock and flags anything below it. FFVV = FFVV-65C-R2N23, HBXX = HBXX-3319DS-A2M. Change any number here.').setFontStyle('italic');
+}
+
+/**
+ * Adds models and product codes the sheet doesn't have yet (Settings, Lookup, model dropdowns).
+ * Runs once by itself after a release that changes MODELS_REV. Never changes numbers already on the Settings tab.
+ */
+var MODELS_REV = '2';
+function addNewModels_(ss) {
+  var props = PropertiesService.getScriptProperties();
+  if (props.getProperty('MODELS_REV') === MODELS_REV) return;
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(15000)) return;
+  try {
+    if (props.getProperty('MODELS_REV') === MODELS_REV) return;
+    var st = ss.getSheetByName(SETTINGS_TAB);
+    if (st) {
+      var have = st.getLastRow() > 1 ? st.getRange(2, 1, st.getLastRow() - 1, 1).getValues().map(function (r) { return String(r[0]).trim().toUpperCase(); }) : [];
+      RADIO_MODELS.forEach(function (m) { if (have.indexOf(m) < 0) { st.appendRow([m, RESTING_STOCK[m] || 0, RESTING_STOCK[m] || 0]); have.push(m); } });
+    }
+    var lk = ss.getSheetByName('Lookup');
+    if (lk) {
+      var codes = lk.getLastRow() > 1 ? lk.getRange(2, 1, lk.getLastRow() - 1, 1).getValues().map(function (r) { return String(r[0]).trim().replace(/\.0+$/, ''); }) : [];
+      LOOKUP_ROWS.forEach(function (row) { if (codes.indexOf(String(row[0])) < 0) { lk.appendRow(row); codes.push(String(row[0])); } });
+    }
+    ['AU', 'HN'].forEach(function (m) {
+      var sh = ss.getSheetByName(MARKETS[m].inv);
+      if (!sh) return;
+      var cur = listFromValidation_(ss, MARKETS[m].inv, 'B3'), all = cur.slice();
+      RADIO_MODELS.forEach(function (x) { if (all.indexOf(x) < 0) all.push(x); });
+      if (all.length !== cur.length || !cur.length) sh.getRange('B2:B1000').setDataValidation(list_(all));
+    });
+    props.setProperty('MODELS_REV', MODELS_REV);
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 /** Builds anything missing (tabs, columns, the Team tab, the home-screen icon). Never changes data that's there. */
