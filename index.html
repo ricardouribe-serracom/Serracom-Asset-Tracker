@@ -306,6 +306,7 @@ body{padding-top:env(safe-area-inset-top,0px)}
 var REASONS=["Will Not Power Up","Fault/OSS Alarms will not clear","RF Intermittent Performance/RTWP/VSWR","Cannot Detect/Access","Heat Related (Fan Failure)","Unstable/Resets","Damage Port/Connector/Interface","Physically Defective (non-connectors and interface)","Cannot Load Software","Cannot Upgrade Due to Hardware Version Level","Failed Light Test/Will Not Pass Light (Hybrid/Fiber Jumpers)","Water in unit"];
 var MARKETS={AU:{name:"AU",store:"AU WAREHOUSE",sitePh:"TK02047"},HN:{name:"HN",store:"HN WAREHOUSE",sitePh:"A3H0170A"}};
 var NOT_SPARE=["SITE","TELLWORKS"];
+var STOCK_ORDER=["AHLOA","AEHC","AHFIG","AHLOB","AHFII","AAFIA","FXFC","FFVV","HBXX"];
 var DEFAULT_MODELS=["AEHC","AAFIA","AHLOA","AHFIG","AHLOB","AHFII","FXFC","FXFB","AVHA","FFVV","HBXX"];
 var store={get:function(k){try{return localStorage.getItem(k);}catch(e){return null;}},set:function(k,v){try{localStorage.setItem(k,v);}catch(e){}}};
 var cur=MARKETS[store.get("rtt-market")]?store.get("rtt-market"):"AU";
@@ -590,7 +591,7 @@ function viewDashboard(){
     var locs=locsFor(cur).filter(function(l){ return NOT_SPARE.indexOf(l)<0&&inv.some(function(r){return r.loc===l&&isSpare(r);}); });
     var tgt=(data.targets&&data.targets[cur]&&data.targets[cur].models)||{};
     var models=[]; inv.forEach(function(r){ if(isSpare(r)&&models.indexOf(r.model)<0) models.push(r.model); });
-    Object.keys(tgt).forEach(function(md){ if(tgt[md]>0&&models.indexOf(md)<0) models.push(md); }); models.sort();
+    Object.keys(tgt).forEach(function(md){ if(tgt[md]>0&&models.indexOf(md)<0) models.push(md); }); models.sort(function(a,b){ var ia=STOCK_ORDER.indexOf(a), ib=STOCK_ORDER.indexOf(b); if(ia<0) ia=99; if(ib<0) ib=99; return ia-ib||(a<b?-1:a>b?1:0); });
     if(locs.length||models.length) table='<section class="spares"><div class="sec-h"><h2>Spares by location</h2><p>Good spares on hand / resting stock</p></div><div class="tbl-wrap"><table><thead><tr><th>Model</th><th>Total</th>'+locs.map(function(l){return '<th title="'+esc(title(l))+'">'+esc(shortLoc(l))+'</th>';}).join("")+'</tr></thead><tbody>'+
       models.map(function(md){ var c=locs.map(function(l){return inv.filter(function(r){return r.model===md&&r.loc===l&&isSpare(r);}).length;}); var tot=c.reduce(function(a,b){return a+b;},0);
         var rest=tgt[md]!=null? tgt[md] : (data.targets? 0 : (md==="AHLOB"?1:md==="FXFB"||md==="AVHA"?0:2)), cls=rest&&tot<rest?" low":rest&&tot>rest?" over":"";
