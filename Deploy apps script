@@ -1,0 +1,37 @@
+# Sends apps-script/ to Ricardo's Google Apps Script project and updates the live web app link.
+# Runs whenever something in apps-script/ changes on main (or by hand from the Actions tab).
+name: Deploy Apps Script
+
+on:
+  push:
+    branches: [main]
+    paths: ["apps-script/**"]
+  workflow_dispatch:
+
+concurrency: apps-script-deploy
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Sign in as Ricardo (saved once as a secret)
+        env:
+          CLASPRC: ${{ secrets.CLASPRC_JSON }}
+          SCRIPT_ID: ${{ secrets.SCRIPT_ID }}
+        run: |
+          printf '%s' "$CLASPRC" > ~/.clasprc.json
+          printf '{"scriptId":"%s","rootDir":"apps-script"}' "$SCRIPT_ID" > .clasp.json
+
+      - name: Upload Code.gs and Index.html
+        run: npx --yes @google/clasp@2.4.2 push --force
+
+      - name: Update the live link (same /exec URL)
+        env:
+          DEPLOYMENT_ID: ${{ secrets.DEPLOYMENT_ID }}
+        run: npx --yes @google/clasp@2.4.2 deploy --deploymentId "$DEPLOYMENT_ID" --description "From GitHub $(git rev-parse --short HEAD)"
