@@ -253,6 +253,18 @@ body{padding-top:env(safe-area-inset-top,0px)}
 .zoom button{border:0;border-radius:999px;min-width:44px;min-height:36px;font:600 14px var(--body);background:transparent;color:#fff;cursor:pointer}
 .zoom button[aria-pressed="true"]{background:#fff;color:#111}
 .site-pick{position:relative}
+.spares table th,.spares table td{padding:7px 8px;font-size:13px}
+.spares table th{font-size:11px;letter-spacing:.03em}
+.spares td .lowtag{margin-left:4px;padding:1px 4px;font-size:10px}
+.spares .model{font-size:12px}
+.spares td.tot{font-weight:700}
+.spares td.tot .of{font-weight:400;color:var(--muted)}
+.spares td.tot.low{color:var(--warn)}
+.spares td.tot.over{color:var(--brand)}
+.spares .zero{color:var(--muted);opacity:.6}
+.spares .note{margin-top:6px}
+.sfield input.masked{-webkit-text-security:disc;text-security:disc;letter-spacing:.15em}
+.slinks{display:flex;flex-wrap:wrap;gap:2px 16px}
 .filters2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .filters2 label{display:grid;gap:4px;font-size:13px;font-weight:500;min-width:0}
 .filters2 select{width:100%;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:9px 10px;font-size:16px}
@@ -294,7 +306,7 @@ body{padding-top:env(safe-area-inset-top,0px)}
 var REASONS=["Will Not Power Up","Fault/OSS Alarms will not clear","RF Intermittent Performance/RTWP/VSWR","Cannot Detect/Access","Heat Related (Fan Failure)","Unstable/Resets","Damage Port/Connector/Interface","Physically Defective (non-connectors and interface)","Cannot Load Software","Cannot Upgrade Due to Hardware Version Level","Failed Light Test/Will Not Pass Light (Hybrid/Fiber Jumpers)","Water in unit"];
 var MARKETS={AU:{name:"AU",store:"AU WAREHOUSE",sitePh:"TK02047"},HN:{name:"HN",store:"HN WAREHOUSE",sitePh:"A3H0170A"}};
 var NOT_SPARE=["SITE","TELLWORKS"];
-var DEFAULT_MODELS=["AEHC","AAFIA","AHLOA","AHFIG","AHLOB","AHFII","FXFC","FXFB","AVHA"];
+var DEFAULT_MODELS=["AEHC","AAFIA","AHLOA","AHFIG","AHLOB","AHFII","FXFC","FXFB","AVHA","FFVV","HBXX"];
 var store={get:function(k){try{return localStorage.getItem(k);}catch(e){return null;}},set:function(k,v){try{localStorage.setItem(k,v);}catch(e){}}};
 var cur=MARKETS[store.get("rtt-market")]?store.get("rtt-market"):"AU";
 var token=store.get("rtt-token")||"", user=null, isMgr=false, team={}, viewAs=store.get("rtt-viewas")||"";
@@ -395,8 +407,9 @@ function myTruck(){ var v=viewMember(); return v? H(v.truck) : user? H(user.truc
 /* ---------- parse the sheet ---------- */
 function build(r){
   LOOKUP={}; (r.lookup||[]).slice(1).forEach(function(x){ var c=S(x[0]).replace(/\.0+$/,""), m=S(x[1]); if(c&&m) LOOKUP[c]=m; });
-  var out={models:(r.models&&r.models.length?r.models:DEFAULT_MODELS),locations:r.locations||{},targets:null};
-  if(r.settings&&r.settings.length>1){ var sh=r.settings[0].map(H), mi=hidx(sh,["MODEL"]), am=hidx(sh,["AU MIN SPARES"]), hm=hidx(sh,["HN MIN SPARES"]);
+  var mods=[]; (r.models||[]).concat(DEFAULT_MODELS).forEach(function(m){ m=H(m); if(m&&mods.indexOf(m)<0) mods.push(m); });
+  var out={models:mods,locations:r.locations||{},targets:null};
+  if(r.settings&&r.settings.length>1){ var sh=r.settings[0].map(H), mi=hidx(sh,["MODEL"]), am=hidx(sh,["AU RESTING STOCK","AU MIN SPARES"]), hm=hidx(sh,["HN RESTING STOCK","HN MIN SPARES"]);
     out.targets={AU:{total:0,models:{}},HN:{total:0,models:{}}};
     r.settings.slice(1).forEach(function(x){ var md=H(x[mi]); if(!md) return; [["AU",am],["HN",hm]].forEach(function(p){ var n=parseInt(x[p[1]],10); if(isNaN(n)) return; if(/^ALL MODELS/.test(md)) out.targets[p[0]].total=n; else out.targets[p[0]].models[md]=n; }); }); }
   out.sites={AU:[],HN:[]};
@@ -449,8 +462,6 @@ function flags(m){
   var inv=data[m].inv, tg=data[m].tags, out=[], bySn={};
   (inv||[]).forEach(function(r){ bySn[r.sn]=r; });
   var open=tg.filter(function(t){return t.ordered===false;});
-  var late=tg.filter(function(t){ return t.ordered===true&&!t.received&&t.orderedOn&&Date.now()-t.orderedOn.getTime()>14*864e5; });
-  if(late.length) out.push({crit:false,title:plural(late.length,"replacement order")+" waiting over 2 weeks",detail:late.slice(0,4).map(function(t){return t.site+" (ordered "+fmtDate(t.orderedOn)+")";}).join(", ")+". Follow up on the order."});
   if(open.length&&isMgr){ var o=open[open.length-1]; out.push({crit:true,title:open.length+(open.length>1?" swaps still need":" swap still needs")+" a replacement order",detail:"Oldest is "+o.site+" from "+fmtDate(o.date)+(isMgr?". Tap Mark order submitted on the Red tags tab once it's in.":". A manager marks it submitted once it's ordered.")}); }
   var missing=tg.filter(function(t){return t.ordered===null;});
   if(missing.length) out.push({crit:false,title:missing.length+" red tag"+(missing.length>1?"s aren't":" isn't")+" on the Bad Radios list",detail:missing.slice(0,4).map(function(t){return t.badSn+" at "+t.site;}).join(", ")});
@@ -467,14 +478,14 @@ function flags(m){
     var tg2=data.targets&&data.targets[m];
     if(tg2){
       var have=inv.filter(isSpare).length;
-      if(tg2.total&&have<tg2.total) out.push({crit:have<tg2.total/2,title:have+" good spares on hand, target is "+tg2.total,detail:"Restock "+(tg2.total-have)+" more. Change the target on the Settings tab."});
+      if(tg2.total&&have<tg2.total) out.push({crit:have<tg2.total/2,title:have+" of "+tg2.total+" spares on hand",detail:"Resting stock is "+tg2.total+". Numbers are on the Settings tab."});
       var low=[], none=false;
       Object.keys(tg2.models).forEach(function(md){ var min=tg2.models[md]; if(!min) return; var c=inv.filter(function(r){return r.model===md&&isSpare(r);}).length;
-        if(c<min){ low.push(md+" "+c+" of "+min); if(!c) none=true; } });
-      if(low.length) out.push({crit:none,title:plural(low.length,"model")+" below the spare minimum",detail:low.join(", ")+". Minimums are on the Settings tab."});
+        if(c<min){ low.push(md+" "+c+"/"+min); if(!c) none=true; } });
+      if(low.length) out.push({crit:none,title:plural(low.length,"model")+" below resting stock",detail:low.join(", ")+". Numbers are on the Settings tab."});
     } else {
       var models=[]; inv.forEach(function(r){ if(r.model!=="UNKNOWN"&&models.indexOf(r.model)<0) models.push(r.model); });
-      models.forEach(function(md){ var c=inv.filter(function(r){return r.model===md&&isSpare(r);}).length; if(c<(md==="AHLOB"?1:2)) out.push({crit:c===0,title:md+": "+(c===0?"no spares":"only 1 spare")+" on hand",detail:"Restock before the next swap."}); });
+      models.forEach(function(md){ var c=inv.filter(function(r){return r.model===md&&isSpare(r);}).length; if(c<(md==="AHLOB"?1:md==="FXFB"||md==="AVHA"?0:2)) out.push({crit:c===0,title:md+": "+(c===0?"no spares":"only 1 spare")+" on hand",detail:"Restock before the next swap."}); });
     }
   }
   return out.sort(function(a,b){return b.crit-a.crit;});
@@ -577,10 +588,14 @@ function viewDashboard(){
   var table="";
   if(inv&&inv.length){
     var locs=locsFor(cur).filter(function(l){ return NOT_SPARE.indexOf(l)<0&&inv.some(function(r){return r.loc===l&&isSpare(r);}); });
-    var models=[]; inv.forEach(function(r){ if(isSpare(r)&&models.indexOf(r.model)<0) models.push(r.model); }); models.sort();
-    if(locs.length) table='<section><div class="sec-h"><h2>Spares by location</h2><p>Good radios not at a site or Tellworks</p></div><div class="tbl-wrap"><table><thead><tr><th>Model</th><th>Total</th>'+locs.map(function(l){return '<th>'+esc(title(l))+'</th>';}).join("")+'</tr></thead><tbody>'+
-      models.map(function(md){ var c=locs.map(function(l){return inv.filter(function(r){return r.model===md&&r.loc===l&&isSpare(r);}).length;}); var tot=c.reduce(function(a,b){return a+b;},0); var min=data.targets&&data.targets[cur]&&data.targets[cur].models[md]!=null? data.targets[cur].models[md] : (md==="AHLOB"?1:2), low=tot<min;
-        return '<tr><td><span class="model">'+esc(md)+'</span></td><td class="tot'+(low?" low":"")+'">'+tot+(low?'<span class="lowtag">LOW</span>':"")+'</td>'+c.map(function(x){return '<td>'+x+'</td>';}).join("")+'</tr>'; }).join("")+'</tbody></table></div></section>';
+    var tgt=(data.targets&&data.targets[cur]&&data.targets[cur].models)||{};
+    var models=[]; inv.forEach(function(r){ if(isSpare(r)&&models.indexOf(r.model)<0) models.push(r.model); });
+    Object.keys(tgt).forEach(function(md){ if(tgt[md]>0&&models.indexOf(md)<0) models.push(md); }); models.sort();
+    if(locs.length||models.length) table='<section class="spares"><div class="sec-h"><h2>Spares by location</h2><p>Good spares on hand / resting stock</p></div><div class="tbl-wrap"><table><thead><tr><th>Model</th><th>Total</th>'+locs.map(function(l){return '<th title="'+esc(title(l))+'">'+esc(shortLoc(l))+'</th>';}).join("")+'</tr></thead><tbody>'+
+      models.map(function(md){ var c=locs.map(function(l){return inv.filter(function(r){return r.model===md&&r.loc===l&&isSpare(r);}).length;}); var tot=c.reduce(function(a,b){return a+b;},0);
+        var rest=tgt[md]!=null? tgt[md] : (data.targets? 0 : (md==="AHLOB"?1:md==="FXFB"||md==="AVHA"?0:2)), cls=rest&&tot<rest?" low":rest&&tot>rest?" over":"";
+        return '<tr><td><span class="model">'+esc(md)+'</span></td><td class="tot'+cls+'">'+tot+(rest?'<span class="of">/'+rest+'</span>':'')+'</td>'+c.map(function(x){return '<td>'+(x||'<span class="zero">0</span>')+'</td>';}).join("")+'</tr>'; }).join("")+'</tbody></table></div>'+
+      '<p class="note">Orange: below resting stock. Blue: more than usual, like a replacement ordered before the swap.</p></section>';
   }
   var rc={}; tg.forEach(function(t){ var k=(t.reason||"No reason given").replace(/\s*[\/·]\s*BAD OUT THE BOX$/i,"").replace(/\s+/g," ").trim(), key=k.toLowerCase(); rc[key]=rc[key]||{label:k,n:0}; rc[key].n++; });
   var rs=Object.keys(rc).map(function(k){return rc[k];}).sort(function(a,b){return b.n-a.n;}).slice(0,8);
@@ -596,6 +611,8 @@ function viewDashboard(){
   accountPanel();
   wireAccount();
 }
+/** Short column names for the spares table: AU WH, HN WH, and trucks by first name. */
+function shortLoc(l){ l=H(l); return l.replace(/\s*WAREHOUSE$/," WH").replace(/\s*STORAGE$/," ST").replace(/\s+TRUCK$/,"").replace(/^(\w)(\w{2,})$/,function(m,a,b){ return a+b.toLowerCase(); }); }
 function barList(rs){ if(!rs.length) return '<div class="bars"><span class="note">No red tags yet.</span></div>'; var max=rs[0].n;
   return '<div class="bars">'+rs.map(function(r){return '<div class="bar"><span class="n">'+esc(r.label)+'</span><span class="c">'+r.n+'</span><div class="track"><div class="fill" style="width:'+(r.n/max*100).toFixed(1)+'%"></div></div></div>';}).join("")+'</div>'; }
 function accountPanel(){
@@ -718,8 +735,8 @@ function viewInventory(){
   '<section><div class="sec-h"><h2>'+(rc?'Receive replacement':'Asset Transfer')+'</h2><p>'+(rc?'For '+esc(rc.site)+' (pulled '+esc(rc.badSn)+')':'Pick up a radio or move it to your truck')+'</p></div>'+
   (rc?'<div class="banner info">Scan the new radio that came in. It goes into inventory and the order is marked received. <button class="linkbtn" type="button" id="rcCancel">Cancel</button></div>':'')+
   '<form id="xfForm" novalidate><div class="f2">'+
-    scanField("xfSn","Radio serial","serial",false)+
-    '<label>Radio<select id="xfModel"><option value="">Choose radio</option>'+data.models.map(function(m){return '<option'+(rc&&rc.model===m?' selected':'')+'>'+esc(m)+'</option>';}).join("")+'</select><span class="hint" id="xfModelHint">Filled in from the scan</span></label>'+
+    scanField("xfSn","Serial number","serial",false)+
+    '<label>Model<select id="xfModel"><option value="">Choose radio</option>'+data.models.map(function(m){return '<option'+(rc&&rc.model===m?' selected':'')+'>'+esc(m)+'</option>';}).join("")+'</select><span class="hint" id="xfModelHint">Filled in from the scan</span></label>'+
     '<div>'+scanField("xfAsset","T-Mobile asset tag","asset",true)+'<label class="check sm"><input id="xfNoTag" type="checkbox"> No asset tag on this radio</label></div>'+
     '<fieldset class="dest"><legend>Move it to</legend><div class="seg">'+
       '<label><input type="radio" name="xfDest" value="TRUCK"'+(truck?' checked':' disabled')+'><span>My truck<small>'+(truck?esc(title(truck)):'None on Team tab')+'</small></span></label>'+
@@ -792,7 +809,7 @@ function drawInv(){
       '<div class="sub"><span>'+esc(where)+esc(movedLine(r))+'</span>'+(r.asset&&r.asset!=="NA"?'<span class="mono">'+esc(r.asset)+'</span>':"")+'</div>'+
       (isMgr?'<select class="move" data-sn="'+esc(r.sn)+'" data-row="'+r.row+'" aria-label="Move '+esc(r.sn)+'">'+(r.loc==="NO LOCATION"?'<option value="" selected>No location</option>':"")+locs.filter(function(l){return l!=="NO LOCATION";}).map(function(l){return '<option value="'+esc(l)+'"'+(l===r.loc?" selected":"")+'>'+esc(title(l))+'</option>';}).join("")+
         '<option value="__status">'+(r.status==="GOOD"?"Mark bad":"Mark good")+'</option><option value="__market">Move to '+other+' inventory</option></select>'
-        : canReport?'<button class="btn quiet sm" type="button" data-report="'+esc(r.sn)+'">Report bad</button>':'')+'</div>'; }).join("") : !inv.length?'<div class="empty">No radios yet. Scan one in with Asset Transfer above.</div>' : (q.length>=5?'':'<div class="empty">No radios match. Clear the search or pick another location.</div>');
+        : '')+'</div>'; }).join("") : !inv.length?'<div class="empty">No radios yet. Scan one in with Asset Transfer above.</div>' : (q.length>=5?'':'<div class="empty">No radios match. Clear the search or pick another location.</div>');
 }
 function onMove(e){
   var sel=e.target.closest("select.move"); if(!sel) return;
@@ -842,9 +859,9 @@ var instQuery="";
 function viewInstall(){
   app.innerHTML=liveLine()+
   '<section><div class="sec-h"><h2>Install · '+esc(MARKETS[cur].name)+'</h2><p>Moves a radio to a site</p></div><form id="inForm" novalidate><div class="f2">'+
-    scanField("inSn","Radio serial","serial",false)+
+    scanField("inSn","Serial number","serial",false)+
     siteField("inSite")+
-    '<label id="inModelL" hidden>Radio<select id="inModel"><option value="">Choose radio</option>'+data.models.map(function(m){return '<option>'+esc(m)+'</option>';}).join("")+'</select><span class="hint">Not in inventory yet, so it\'s added as installed</span></label>'+
+    '<label id="inModelL" hidden>Model<select id="inModel"><option value="">Choose radio</option>'+data.models.map(function(m){return '<option>'+esc(m)+'</option>';}).join("")+'</select><span class="hint">Not in inventory yet, so it\'s added as installed</span></label>'+
     '<div id="inAssetW" hidden>'+scanField("inAsset","T-Mobile asset tag","asset",true)+'</div>'+
   '</div><div class="photos"><label>Serial tag photo (required)<input id="inPh" type="file" accept="image/*" capture="environment" hidden><span class="btn quiet sm" role="button" tabindex="0" id="inPhB">Add photo</span><img class="thumb" id="inPhP" alt="Serial tag photo" hidden><span class="hint" id="inPhH">Comes from your scan, or tap to take one</span></label></div>'+
   '<div id="inErr" class="formerr" hidden></div><div class="actions"><button class="btn red" type="submit" id="inBtn">Install</button></div></form></section>'+
@@ -918,7 +935,7 @@ function drawInstalledList(){
 
 /* red tags */
 var tagFilter="open";
-function tagState(t){ return t.ordered===false?"open" : t.ordered===true&&!t.received?"waiting" : t.received?"received" : "other"; }
+function tagState(t){ return t.ordered===false?"open" : t.ordered===true?"ordered" : "other"; }
 function viewTags(){
   photos={};
   app.innerHTML=liveLine()+logFormHtml()+'<section id="tagSec"></section>';
@@ -926,9 +943,6 @@ function viewTags(){
   drawTags();
   document.getElementById("tagSec").addEventListener("click",function(e){
     var ch=e.target.closest(".chip"); if(ch){ tagFilter=ch.dataset.f; drawTags(); return; }
-    var rv=e.target.closest("[data-receive]");
-    if(rv){ var t0=data[cur].tags.filter(function(x){return String(x.row)===rv.dataset.receive;})[0]; if(!t0) return;
-      receiving={m:cur,row:t0.row,badSn:t0.badSn,site:t0.site,model:t0.model}; go("inventory"); return; }
     var o=e.target.closest("[data-order]"); if(!o) return;
     var t=data[cur].tags.filter(function(x){return String(x.row)===o.dataset.order;})[0]; if(!t) return; var val=o.dataset.val==="1"; o.disabled=true; o.textContent="Saving…";
     run("setOrdered",token,cur,t.row,t.badSn,val).then(function(){ toast(val?"Order marked submitted for "+t.site:t.site+" moved back to open"); return load(true); })
@@ -937,24 +951,23 @@ function viewTags(){
 }
 function drawTags(){
   var sec=document.getElementById("tagSec"); if(!sec) return;
-  var tg=data[cur].tags, n={open:0,waiting:0}; tg.forEach(function(t){ var s=tagState(t); if(n[s]!=null) n[s]++; });
-  if(tagFilter!=="all"&&!n[tagFilter]) tagFilter=n.open?"open":n.waiting?"waiting":"all";
+  var tg=data[cur].tags, n={open:0,ordered:0}; tg.forEach(function(t){ var s=tagState(t); if(n[s]!=null) n[s]++; });
+  if(tagFilter!=="all"&&!n[tagFilter]) tagFilter=n.open?"open":"all";
   var list=tg.filter(function(t){return tagFilter==="all"||tagState(t)===tagFilter;});
   sec.innerHTML='<div class="sec-h"><h2>'+esc(MARKETS[cur].name)+' red tags</h2><p>'+plural(tg.length,'tag')+'</p></div>'+
-    '<div class="chips" id="tagChips"><button type="button" class="chip" data-f="open" aria-pressed="'+(tagFilter==="open")+'">Needs order ('+n.open+')</button><button type="button" class="chip" data-f="waiting" aria-pressed="'+(tagFilter==="waiting")+'">Waiting for replacement ('+n.waiting+')</button><button type="button" class="chip" data-f="all" aria-pressed="'+(tagFilter==="all")+'">All</button></div>'+
+    '<div class="chips" id="tagChips"><button type="button" class="chip" data-f="open" aria-pressed="'+(tagFilter==="open")+'">Needs order ('+n.open+')</button><button type="button" class="chip" data-f="ordered" aria-pressed="'+(tagFilter==="ordered")+'">Order submitted ('+n.ordered+')</button><button type="button" class="chip" data-f="all" aria-pressed="'+(tagFilter==="all")+'">All</button></div>'+
     '<div class="tags" id="tagList">'+(list.length? list.map(tagCard).join("") : '<div class="empty">'+(tg.length?'Nothing here right now.':'No red tags yet. Log the first one above.')+'</div>')+'</div>'+
-    (isMgr?'':'<p class="note">Managers mark orders submitted. Anyone can receive the replacement when it arrives.</p>');
+    (isMgr?'':'<p class="note">Managers mark orders submitted.</p>');
 }
 function tagCard(t){
   var ph=t.photos.map(function(p){return '<a href="'+esc(p.url)+'" target="_blank" rel="noopener">'+esc(p.label)+' photo</a>';}).join("");
   var s=tagState(t), status=
-      s==="received"? '<span class="pill good">Replacement received '+esc(fmtDate(t.received))+'</span>'
-    : s==="waiting"? '<span class="pill warn">Ordered'+(t.orderedOn?' '+esc(fmtDate(t.orderedOn)):'')+' · waiting</span><button class="btn red sm" type="button" data-receive="'+t.row+'">Received</button>'+(isMgr?'<button class="btn quiet sm" type="button" data-order="'+t.row+'" data-val="0">Undo</button>':'')
+      s==="ordered"? '<span class="pill good">Order submitted'+(t.orderedOn?' '+esc(fmtDate(t.orderedOn)):'')+'</span>'+(isMgr?'<button class="btn quiet sm" type="button" data-order="'+t.row+'" data-val="0">Undo</button>':'')
     : s==="open"? '<span class="pill bad">Order not submitted</span>'+(isMgr?'<button class="btn red sm" type="button" data-order="'+t.row+'" data-val="1">Mark order submitted</button>':'')
     : '<span class="pill warn">Not on Bad Radios list</span>';
   var inst=(data[cur].inv||[]).filter(function(r){ return r.loc==="SITE"&&r.site===t.site; });
-  return '<article class="tag'+(s==="received"?" done":"")+'"><div class="t1"><span class="site">'+esc(t.site)+'</span>'+(t.model?'<span class="model">'+esc(t.model)+'</span>':"")+'<span class="date">'+fmtDate(t.date)+(t.by?" · "+esc(t.by):"")+'</span></div>'+
-    '<dl><dt>Pulled</dt><dd class="mono">'+esc(t.badSn)+'</dd>'+(inst.length?'<dt>At site now</dt><dd class="mono">'+inst.map(function(r){return esc(r.sn);}).join(", ")+'</dd>':'')+(t.receivedSn?'<dt>Replacement</dt><dd class="mono">'+esc(t.receivedSn)+'</dd>':'')+(t.asset&&t.asset!=="NA"?'<dt>Asset</dt><dd class="mono">'+esc(t.asset)+'</dd>':'')+
+  return '<article class="tag'+(s==="ordered"?" done":"")+'"><div class="t1"><span class="site">'+esc(t.site)+'</span>'+(t.model?'<span class="model">'+esc(t.model)+'</span>':"")+'<span class="date">'+fmtDate(t.date)+(t.by?" · "+esc(t.by):"")+'</span></div>'+
+    '<dl><dt>Pulled</dt><dd class="mono">'+esc(t.badSn)+'</dd>'+(inst.length?'<dt>At site now</dt><dd class="mono">'+inst.map(function(r){return esc(r.sn);}).join(", ")+'</dd>':'')+(t.asset&&t.asset!=="NA"?'<dt>Asset</dt><dd class="mono">'+esc(t.asset)+'</dd>':'')+
     '<dt>Reason</dt><dd>'+esc(t.reason||"Not given")+(t.notes&&t.notes.toLowerCase()!==t.reason.toLowerCase()?" · "+esc(t.notes):"")+'</dd><dt>Ticket</dt><dd class="mono">'+esc(t.ticket||"None")+'</dd></dl>'+
     '<div class="t3">'+status+ph+'</div></article>';
 }
@@ -1216,6 +1229,8 @@ function pickFrom(found,kind){
   });
   // an asset tag that doesn't start with TM still counts when it's the only other barcode found
   if(kind==="asset"&&!assets.length) found.forEach(function(p){ if(p.other&&assets.indexOf(p.other)<0) assets.push(p.other); });
+  // antennas and other gear: no Nokia serial on the label, so take the other barcode
+  if(kind==="serial"&&!serials.length) found.forEach(function(p){ if(p.other&&serials.indexOf(p.other)<0) serials.push(p.other); });
   var list= kind==="serial"? serials : kind==="asset"? assets : serials.concat(assets);
   return {value:list[0]||"",choices:list,model:model,code:code,raw:raw};
 }
@@ -1273,9 +1288,9 @@ function scanOverlay(html){
 }
 function closeScan(){ stopLive(); var o=document.getElementById("scanOv"); if(o&&o.parentNode) o.parentNode.removeChild(o); }
 document.addEventListener("keydown",function(e){ if(e.key==="Escape") closeScan(); });
-function startPhoto(kind,cb){
+function startPhoto(kind,cb,library){
   [].forEach.call(document.querySelectorAll("input.scan-file"),function(x){ if(x.parentNode) x.parentNode.removeChild(x); });
-  var inp=document.createElement("input"); inp.type="file"; inp.accept="image/*"; inp.setAttribute("capture","environment"); inp.className="scan-file"; inp.hidden=true; document.body.appendChild(inp);
+  var inp=document.createElement("input"); inp.type="file"; inp.accept="image/*"; if(!library) inp.setAttribute("capture","environment"); inp.className="scan-file"; inp.hidden=true; document.body.appendChild(inp);
   inp.addEventListener("change",function(){
     var f=inp.files&&inp.files[0]; if(inp.parentNode) inp.parentNode.removeChild(inp); if(!f) return;
     scanOverlay('<h3>Reading the barcode</h3><div class="skel"></div><div class="skel s"></div><p class="note">This takes a few seconds.</p>');
@@ -1308,18 +1323,19 @@ function scanField(id,label,kind,optional){
     '<div class="srow"><input id="'+id+'" type="text" class="mono" readonly data-mode="scan" data-opt="'+(optional?1:0)+'" placeholder="Tap Scan" autocomplete="off" autocapitalize="characters" spellcheck="false">'+scanButton(id,kind)+'</div>'+
     '<input id="'+id+'2" type="text" class="mono" placeholder="Type it again to confirm" aria-label="Confirm '+esc(label)+'" autocomplete="off" autocapitalize="characters" spellcheck="false" hidden>'+
     '<span class="hint" id="'+id+'Hint">'+(optional?"Optional":"")+'</span>'+
-    '<button type="button" class="linkbtn" data-type="'+id+'" data-label="'+esc(link)+'">'+esc(link)+'</button></div>';
+    '<div class="slinks">'+(kind==="serial"?'<button type="button" class="linkbtn" data-upload="'+id+'" data-kind="'+kind+'">Upload a photo instead</button>':'')+
+    '<button type="button" class="linkbtn" data-type="'+id+'" data-label="'+esc(link)+'">'+esc(link)+'</button></div></div>';
 }
 function setScanned(id,r){
   var el=document.getElementById(id), c2=document.getElementById(id+"2"), h=document.getElementById(id+"Hint"), b=document.querySelector('[data-type="'+id+'"]');
   if(!el) return;
-  el.dataset.mode="scan"; el.readOnly=true; el.value=r.value; el.placeholder="Tap Scan";
+  el.dataset.mode="scan"; el.readOnly=true; el.value=r.value; el.placeholder="Tap Scan"; el.classList.remove("masked");
   if(c2){ c2.value=""; c2.hidden=true; } if(b) b.textContent=b.dataset.label;
   if(h){ h.className="hint ok"; h.textContent="Scanned"+(r.model?" · "+r.model:""); }
 }
 function resetField(id){
   var el=document.getElementById(id), c2=document.getElementById(id+"2"), h=document.getElementById(id+"Hint"), b=document.querySelector('[data-type="'+id+'"]');
-  el.dataset.mode="scan"; el.readOnly=true; el.value=""; el.placeholder="Tap Scan";
+  el.dataset.mode="scan"; el.readOnly=true; el.value=""; el.placeholder="Tap Scan"; el.classList.remove("masked");
   if(c2){ c2.value=""; c2.hidden=true; } if(b) b.textContent=b.dataset.label;
   if(h){ h.className="hint"; h.textContent=el.dataset.opt==="1"?"Optional":""; }
 }
@@ -1338,11 +1354,20 @@ function wireScan(root){
     var id=b.dataset.scan;
     startScan(b.dataset.kind,function(r){ var el=document.getElementById(id); if(!el) return; if(el.dataset.mode) setScanned(id,r); if(scanHooks[id]) scanHooks[id](r); });
   }); });
+  // a photo taken earlier (from the camera roll): the serial is read from it and it becomes the label photo
+  [].forEach.call(root.querySelectorAll("[data-upload]"),function(b){ b.addEventListener("click",function(){
+    var id=b.dataset.upload;
+    startPhoto(b.dataset.kind,function(r){ var el=document.getElementById(id); if(!el) return; if(el.dataset.mode) setScanned(id,r); if(scanHooks[id]) scanHooks[id](r); },true);
+  }); });
   [].forEach.call(root.querySelectorAll("[data-type]"),function(b){ b.addEventListener("click",function(){
     var id=b.dataset.type, el=document.getElementById(id), c2=document.getElementById(id+"2"), h=document.getElementById(id+"Hint");
     if(el.dataset.mode==="scan"){
       el.dataset.mode="typed"; el.readOnly=false; el.value=""; el.placeholder="Type it exactly as printed"; c2.value=""; c2.hidden=false;
-      b.textContent="Scan instead"; h.className="hint"; h.textContent="Typed entries are flagged in the notes."; el.focus();
+      b.textContent="Scan instead"; h.className="hint"; h.textContent="Type it, then type it again below. The first one hides so you can't copy it."; el.focus();
+      if(!c2.dataset.wired){ c2.dataset.wired="1";
+        var hide=function(){ if(el.dataset.mode==="typed"&&el.value) el.classList.add("masked"); };
+        c2.addEventListener("focus",hide); c2.addEventListener("input",hide);
+        el.addEventListener("focus",function(){ el.classList.remove("masked"); c2.value=""; }); }
     } else resetField(id);
     if(scanHooks[id+":mode"]) scanHooks[id+":mode"]();
   }); });
