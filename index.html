@@ -330,6 +330,9 @@ function parseCode(text){
   var raw=String(text==null?"":text).replace(/\u241D|<GS>/gi,"\x1d").replace(/\u241E|<RS>/gi,"\x1e").replace(/\u2404|<EOT>/gi,"\x04");
   var flat=raw.replace(/[\x00-\x1f]/g,"").trim(), up=flat.toUpperCase(), m;
   var out={raw:raw,flat:flat,serial:"",code:"",model:"",asset:""};
+  // Andrew antennas (FFVV, HBXX): one barcode is the model (FFVV-65C-R2N23), another the serial (25IN131619198)
+  if((m=up.match(/^([A-Z]{4})-[A-Z0-9]+-[A-Z0-9]+$/))&&DEFAULT_MODELS.indexOf(m[1])>=0){ out.model=m[1]; out.label=up; return out; }
+  if(/^\d{2}[A-Z]{2}\d{8,10}$/.test(up)){ out.serial=up; out.andrew=true; return out; }
   if(/[\x1d\x1e\x04]/.test(raw)){
     raw.split(/[\x1d\x1e\x04]/).forEach(function(f){ f=f.replace(/[\x00-\x1f]/g,"").trim().toUpperCase();
       if((m=f.match(/^1P(\d{6})/))) out.code=out.code||m[1];
@@ -1222,12 +1225,15 @@ function zxRead(ZX,c,formats){
 }
 function pickFrom(found,kind){
   var serials=[], assets=[], model="", code="", raw="";
+  // an Andrew serial wins over the extra serial in the small 2D code on HBXX labels
+  if(found.some(function(p){ return p.andrew; })) found=found.filter(function(p){ return !p.serial||p.andrew; });
   found.slice().sort(function(a,b){ return (b.code&&b.serial?1:0)-(a.code&&a.serial?1:0); }).forEach(function(p){
     if(p.serial&&serials.indexOf(p.serial)<0) serials.push(p.serial);
     if(p.serial&&p.code&&!raw) raw=p.flat;
     if(p.code&&!code){ code=p.code; model=p.model; }
     if(p.asset&&assets.indexOf(p.asset)<0) assets.push(p.asset);
   });
+  if(!model) found.forEach(function(p){ if(p.model&&!p.code&&!model) model=p.model; });
   // an asset tag that doesn't start with TM still counts when it's the only other barcode found
   if(kind==="asset"&&!assets.length) found.forEach(function(p){ if(p.other&&assets.indexOf(p.other)<0) assets.push(p.other); });
   // antennas and other gear: no Nokia serial on the label, so take the other barcode
@@ -1375,7 +1381,7 @@ function wireScan(root){
   [].forEach.call(root.querySelectorAll("input[data-mode]"),function(el){ el.addEventListener("input",function(){
     if(el.dataset.mode!=="typed") return;
     var p=parseCode(el.value);   // a Bluetooth scanner or pasted label scan counts as scanned
-    if(p.serial&&p.code){ var r={value:p.serial,model:p.model,code:p.code,raw:p.flat,choices:[p.serial]}; setScanned(el.id,r); if(scanHooks[el.id]) scanHooks[el.id](r); }
+    if(p.serial&&(p.code||p.andrew)){ var r={value:p.serial,model:p.model,code:p.code,raw:p.flat,choices:[p.serial]}; setScanned(el.id,r); if(scanHooks[el.id]) scanHooks[el.id](r); }
   }); });
 }
 var zxWarm=false;
