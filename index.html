@@ -503,7 +503,8 @@ function flags(m){
 }
 function locsFor(m){
   var list=[], add=function(l){ l=H(l); if(l&&l!=="???"&&list.indexOf(l)<0) list.push(l); };
-  add(MARKETS[m].store); (data.locations[m]||[]).forEach(add); (data[m].inv||[]).forEach(function(r){ add(r.loc); }); add("SITE"); add("TELLWORKS");
+  add(MARKETS[m].store); (data.locations[m]||[]).forEach(add); (data[m].inv||[]).forEach(function(r){ add(r.loc); });
+  Object.keys(team).forEach(function(e){ var p=team[e]; if(p.truck&&(p.market===m||p.market==="BOTH")) add(p.truck); }); add("SITE"); add("TELLWORKS");
   var rank=function(x){ return x===MARKETS[m].store?0:(x.indexOf("WAREHOUSE")>=0||x.indexOf("STORAGE")>=0)?1:x==="SITE"?3:x==="TELLWORKS"?4:x==="NO LOCATION"?9:2; };
   return list.sort(function(a,b){ return rank(a)-rank(b)||a.localeCompare(b); });
 }
