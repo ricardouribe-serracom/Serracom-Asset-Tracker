@@ -606,7 +606,7 @@ function viewDashboard(){
   var rc={}; tg.forEach(function(t){ var k=(t.reason||"No reason given").replace(/\s*[\/·]\s*BAD OUT THE BOX$/i,"").replace(/\s+/g," ").trim(), key=k.toLowerCase(); rc[key]=rc[key]||{label:k,n:0}; rc[key].n++; });
   var rs=Object.keys(rc).map(function(k){return rc[k];}).sort(function(a,b){return b.n-a.n;}).slice(0,8);
   app.innerHTML=liveLine()+
-  '<section><div class="sec-h"><h2>'+esc(MARKETS[cur].name)+'</h2><p>'+plural(inv?inv.length:0,'radio')+' · '+plural(tg.length,'red tag')+'</p></div><div class="stats">'+
+  '<section><div class="sec-h"><h2>'+(cur==="AU"?"Austin":"Houston")+' Overview</h2><p>'+plural(inv?inv.length:0,'radio')+' · '+plural(tg.length,'red tag')+'</p></div><div class="stats">'+
     (isMgr?'<div class="stat'+(open?" hot":"")+'"><span class="v">'+open+'</span><span class="l">Orders not submitted</span></div>':'')+
     '<div class="stat"><span class="v">'+(spares==null?"–":spares)+'</span><span class="l">Good spares on hand</span></div>'+
     '<div class="stat"><span class="v">'+thisMonth+'</span><span class="l">Red tags this month</span></div></div></section>'+
@@ -738,7 +738,7 @@ function viewInventory(){
   var inv=data[cur].inv, locs=locsFor(cur), truck=myTruck(), rc=receiving&&receiving.m===cur?receiving:null;
   if(invFilter!=="All"&&locs.indexOf(invFilter)<0) invFilter="All";
   app.innerHTML=liveLine()+
-  '<section><div class="sec-h"><h2>'+(rc?'Receive replacement':'Asset Transfer')+'</h2><p>'+(rc?'For '+esc(rc.site)+' (pulled '+esc(rc.badSn)+')':'Pick up a radio or move it to your truck')+'</p></div>'+
+  '<section><div class="sec-h"><h2>'+(rc?'Receive replacement':'Asset Transfer to warehouse/truck')+'</h2><p>'+(rc?'For '+esc(rc.site)+' (pulled '+esc(rc.badSn)+')':'Pick up a radio or move it to your truck')+'</p></div>'+
   (rc?'<div class="banner info">Scan the new radio that came in. It goes into inventory and the order is marked received. <button class="linkbtn" type="button" id="rcCancel">Cancel</button></div>':'')+
   '<form id="xfForm" novalidate><div class="f2">'+
     scanField("xfSn","Serial number","serial",false)+
@@ -870,7 +870,7 @@ function drawCheck(){
 var instQuery="";
 function viewInstall(){
   app.innerHTML=liveLine()+
-  '<section><div class="sec-h"><h2>Install · '+esc(MARKETS[cur].name)+'</h2><p>Moves a radio to a site</p></div><form id="inForm" novalidate><div class="f2">'+
+  '<section><div class="sec-h"><h2>Install to site</h2><p>Moves a radio to a site</p></div><form id="inForm" novalidate><div class="f2">'+
     scanField("inSn","Serial number","serial",false)+
     siteField("inSite")+
     '<label id="inModelL" hidden>Model<select id="inModel"><option value="">Choose radio</option>'+data.models.map(function(m){return '<option>'+esc(m)+'</option>';}).join("")+'</select><span class="hint">Not in inventory yet, so it\'s added as installed</span></label>'+
@@ -1500,9 +1500,9 @@ function logFormHtml(){
     '<div class="f2">'+
       siteField("lSite")+
       '<label>Ticket (INC #)<input id="lTicket" type="text" class="mono" placeholder="INC130236867" autocomplete="off" autocapitalize="characters"><span class="hint"></span></label>'+
-      '<label>Radio<select id="lModel"><option value="">Choose radio</option>'+data.models.map(function(m){return '<option>'+esc(m)+'</option>';}).join("")+'</select><span class="hint"></span></label>'+
-      scanField("lBad","Bad radio serial (pulled)","serial",false)+
+      scanField("lBad","Bad Radio SN","serial",false)+
     '</div><div class="f2">'+
+      '<label>Radio<select id="lModel"><option value="">Choose radio</option>'+data.models.map(function(m){return '<option>'+esc(m)+'</option>';}).join("")+'</select><span class="hint"></span></label>'+
       '<label>Failure reason<select id="lReason"><option value="">Choose reason</option>'+REASONS.map(function(r){return '<option>'+esc(r)+'</option>';}).join("")+'</select><span class="hint"></span></label>'+
       scanField("lAsset","T-Mobile asset tag","asset",true)+
     '</div>'+
