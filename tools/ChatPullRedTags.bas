@@ -4,6 +4,7 @@ Attribute VB_Name = "ChatPullRedTags"
 ' Only typing cells are filled, into the existing rows, so the form keeps its formats and formulas.
 ' Formula columns C (Asset Returned Required) and F (Request date), and any formula in D, are never touched.
 ' A serial that's already on the Order form is skipped, so running it twice doesn't add lines twice.
+' Consumables (no serial) get one line per unit used, with N/A as the serial.
 Option Explicit
 
 Public Sub PullRedTags()
@@ -33,40 +34,32 @@ Public Sub PullRedTags()
         If Len(Trim$(lines(i))) > 0 Then
             v = ParseCsvLine(lines(i))
             Dim sn As String: sn = Col(v, hdr, "SERIAL")
-            If sn = "" Then GoTo NextLine
+            If sn = "" Then
+                ' Consumable (jumper, fiber, SFP): no serial, one form line per unit used
+                Dim qty As Long, have As Long, k As Long
+                qty = Val(Col(v, hdr, "QTY")): If qty < 1 Then qty = 1
+                If Col(v, hdr, "PART NAME") = "" Then noPart = noPart & vbCrLf & "  " & Col(v, hdr, "MODEL") & " at " & Col(v, hdr, "SITE ID"): GoTo NextLine
+                have = LinesOnForm(wsO, Col(v, hdr, "PART NAME"), Col(v, hdr, "INC"), Col(v, hdr, "SITE ID"))
+                If have >= qty Then skipped = skipped & vbCrLf & "  " & Col(v, hdr, "MODEL") & " at " & Col(v, hdr, "SITE ID") & " (already on the form)": GoTo NextLine
+                For k = have + 1 To qty
+                    r = NextOrderRow(wsO)
+                    FillOrderLine wsO, r, v, hdr, "N/A"
+                    rj = NextRow(wsJ, 3, "B")
+                    If rj > 3 Then MatchRowAbove wsJ, rj, "A", "J"
+                    FillJustification wsJ, rj, v, hdr
+                    added = added + 1
+                Next k
+                GoTo NextLine
+            End If
             If SerialOnForm(wsO, sn) Then skipped = skipped & vbCrLf & "  " & sn & " (already on the form)": GoTo NextLine
             If Col(v, hdr, "PART NAME") = "" Then noPart = noPart & vbCrLf & "  " & sn & " (" & Col(v, hdr, "MODEL") & ")"
 
-            ' ---- Order form ----
+            ' ---- Order form + Justification ----
             r = NextOrderRow(wsO)
-            wsO.Cells(r, "A").Value = "ORDER "
-            wsO.Cells(r, "B").Value = Col(v, hdr, "PART NAME")
-            wsO.Calculate
-            ' D follows column C (the form's formula): radios that need the asset back get YES, the rest N/A
-            If Not wsO.Cells(r, "D").HasFormula Then wsO.Cells(r, "D").Value = IIf(UCase$(CStr(wsO.Cells(r, "C").Value)) = "NO", "N/A", "YES")
-            wsO.Cells(r, "E").Value = sn
-            wsO.Cells(r, "G").Value = Col(v, hdr, "GC")
-            ColorGC wsO.Cells(r, "G")
-            wsO.Cells(r, "H").Value = Col(v, hdr, "PICKUP")
-            wsO.Cells(r, "I").Value = Col(v, hdr, "PHONE")
-            wsO.Cells(r, "J").Value = Col(v, hdr, "INC")
-            wsO.Cells(r, "K").Value = Col(v, hdr, "FREQUENCY")
-            wsO.Cells(r, "L").Value = Col(v, hdr, "FAIL REASON")
-            wsO.Cells(r, "M").Value = Col(v, hdr, "SITE ID")
-            wsO.Cells(r, "N").Value = Col(v, hdr, "SECTOR")
-
-            ' ---- Justification ----
+            FillOrderLine wsO, r, v, hdr, sn
             rj = NextRow(wsJ, 3, "B")
             If rj > 3 Then MatchRowAbove wsJ, rj, "A", "J"
-            wsJ.Cells(rj, "A").Value = "New request"
-            wsJ.Cells(rj, "B").Value = Col(v, hdr, "PART NAME")
-            wsJ.Cells(rj, "C").Value = Col(v, hdr, "FAIL REASON")
-            wsJ.Cells(rj, "D").Value = "Equipment"
-            wsJ.Cells(rj, "E").Value = Col(v, hdr, "INC")
-            wsJ.Cells(rj, "F").Value = Col(v, hdr, "TECHNOLOGIES")
-            wsJ.Cells(rj, "G").Value = Col(v, hdr, "SECTOR")
-            wsJ.Cells(rj, "H").Value = "Tower top"
-            wsJ.Cells(rj, "I").Value = UCase$(Col(v, hdr, "ALARM NOTES"))
+            FillJustification wsJ, rj, v, hdr
             added = added + 1
         End If
 NextLine:
@@ -77,11 +70,51 @@ Done:
     If Err.Number <> 0 Then MsgBox "Stopped early: " & Err.Description, vbExclamation
 
     Dim msg As String
-    msg = added & " order" & IIf(added = 1, "", "s") & " added to the Order form and Justification."
+    msg = added & " line" & IIf(added = 1, "", "s") & " added to the Order form and Justification."
     If skipped <> "" Then msg = msg & vbCrLf & vbCrLf & "Skipped:" & skipped
     If noPart <> "" Then msg = msg & vbCrLf & vbCrLf & "No CHAT part name, pick it by hand:" & noPart
     MsgBox msg, vbInformation, "Pull red tags"
 End Sub
+
+Private Sub FillOrderLine(ws As Worksheet, r As Long, v As Variant, hdr As Object, sn As String)
+    ws.Cells(r, "A").Value = "ORDER "
+    ws.Cells(r, "B").Value = Col(v, hdr, "PART NAME")
+    ws.Calculate
+    ' D follows column C (the form's formula): parts that must go back get YES, the rest N/A
+    If Not ws.Cells(r, "D").HasFormula Then ws.Cells(r, "D").Value = IIf(UCase$(CStr(ws.Cells(r, "C").Value)) = "NO", "N/A", "YES")
+    ws.Cells(r, "E").Value = sn
+    ws.Cells(r, "G").Value = Col(v, hdr, "GC")
+    ColorGC ws.Cells(r, "G")
+    ws.Cells(r, "H").Value = Col(v, hdr, "PICKUP")
+    ws.Cells(r, "I").Value = Col(v, hdr, "PHONE")
+    ws.Cells(r, "J").Value = Col(v, hdr, "INC")
+    ws.Cells(r, "K").Value = Col(v, hdr, "FREQUENCY")
+    ws.Cells(r, "L").Value = Col(v, hdr, "FAIL REASON")
+    ws.Cells(r, "M").Value = Col(v, hdr, "SITE ID")
+    ws.Cells(r, "N").Value = Col(v, hdr, "SECTOR")
+End Sub
+
+Private Sub FillJustification(ws As Worksheet, r As Long, v As Variant, hdr As Object)
+    ws.Cells(r, "A").Value = "New request"
+    ws.Cells(r, "B").Value = Col(v, hdr, "PART NAME")
+    ws.Cells(r, "C").Value = Col(v, hdr, "FAIL REASON")
+    ws.Cells(r, "D").Value = "Equipment"
+    ws.Cells(r, "E").Value = Col(v, hdr, "INC")
+    ws.Cells(r, "F").Value = Col(v, hdr, "TECHNOLOGIES")
+    ws.Cells(r, "G").Value = Col(v, hdr, "SECTOR")
+    ws.Cells(r, "H").Value = "Tower top"
+    ws.Cells(r, "I").Value = UCase$(Col(v, hdr, "ALARM NOTES"))
+End Sub
+
+' How many Order form lines already have this part for this ticket and site (so a re-run adds nothing twice).
+Private Function LinesOnForm(ws As Worksheet, part As String, inc As String, site As String) As Long
+    Dim last As Long, r As Long, n As Long
+    last = ws.Cells(ws.Rows.Count, "B").End(xlUp).Row
+    For r = 4 To last
+        If Trim$(CStr(ws.Cells(r, "B").Value)) = part And UCase$(Trim$(CStr(ws.Cells(r, "J").Value))) = UCase$(inc) And UCase$(Trim$(CStr(ws.Cells(r, "M").Value))) = UCase$(site) Then n = n + 1
+    Next r
+    LinesOnForm = n
+End Function
 
 Private Function Col(v As Variant, hdr As Object, name As String) As String
     If Not hdr.Exists(name) Then Exit Function

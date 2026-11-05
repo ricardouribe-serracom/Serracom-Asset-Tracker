@@ -17,8 +17,8 @@
  */
 
 var MARKETS = {
-  AU: { name: 'AU', tags: 'AU Virtual Red Tag', bad: 'AU Bad Radios - VRT', inv: 'AU Inventory', moves: 'AU Inventory Tracker', store: 'AU WAREHOUSE' },
-  HN: { name: 'HN', tags: 'HN Virtual Red Tag', bad: 'HN Bad Radios - VRT', inv: 'HN Inventory', moves: 'HN Inventory Tracker', store: 'HN WAREHOUSE' }
+  AU: { name: 'AU', tags: 'AU Virtual Red Tag', bad: 'AU Bad Radios - VRT', inv: 'AU Inventory', moves: 'AU Inventory Tracker', store: 'AU WAREHOUSE', cons: 'AU Consumables' },
+  HN: { name: 'HN', tags: 'HN Virtual Red Tag', bad: 'HN Bad Radios - VRT', inv: 'HN Inventory', moves: 'HN Inventory Tracker', store: 'HN WAREHOUSE', cons: 'HN Consumables' }
 };
 var TEAM_TAB = 'Team';
 var TEAM_HEADERS = ['EMAIL', 'NAME', 'MARKET', 'TRUCK', 'ROLE'];
@@ -26,7 +26,7 @@ var PHOTO_FOLDER = 'Serracom Inventory Tracker Photos';
 var INV_HEADERS = ['STATUS', 'RADIO', 'NOTES', 'LOCATION', 'SERIAL NUMBER', 'SCANNED SN', 'ASSET NUMBER', 'SCANNED ASSET', 'DATE OF SCAN', 'PRODUCT CODE', 'LAST MOVED BY', 'LAST MOVED'];
 var MOVE_HEADERS = ['Timestamp', 'Transfer Location', 'Serial Number', 'Serial Number Picture', 'Asset Number', 'Asset Number Picture', 'Notes', 'Site ID if Installed', 'Radio Name', 'RADIO', 'MOVED BY'];
 var SESSION_DAYS = 120;
-var APP_VERSION = '2026-11-05';
+var APP_VERSION = '2026-11-05b';
 var SETTINGS_TAB = 'Settings';
 var SITES_TAB = 'Sites';
 var SITE_AREAS = { AU: 'Austin', CC: 'Corpus', SA: 'San Antonio', TK: 'Waco', WA: 'Waco', DA: 'Dallas' };
@@ -65,7 +65,9 @@ var API_FNS = {
   installRadio: function (a) { return installRadio(a[0], a[1], a[2]); },
   markBad: function (a) { return markBad(a[0], a[1], a[2], a[3], a[4]); },
   moveRadio: function (a) { return moveRadio(a[0], a[1], a[2], a[3], a[4], a[5], a[6]); },
-  moveMarket: function (a) { return moveMarket(a[0], a[1], a[2]); }
+  moveMarket: function (a) { return moveMarket(a[0], a[1], a[2]); },
+  submitConsumable: function (a) { return submitConsumable(a[0], a[1]); },
+  setConsOrdered: function (a) { return setConsOrdered(a[0], a[1], a[2], a[3]); }
 };
 function api(body) {
   var out, req, cache, key;
@@ -188,10 +190,10 @@ function getData(token, sitesKey) {
   var ss = book_(), user = who_(ss, token), sk = sitesKey_(ss);
   addNewModels_(ss);
   var out = { user: user, team: readTeam_(ss).map(function (m) { return { email: m.email, name: m.name, truck: m.truck, market: m.market, role: m.role }; }),
-    lookup: readTab_(ss, 'Lookup'), chatParts: readTab_(ss, CHAT_PARTS_TAB), chatSettings: readTab_(ss, CHAT_SETTINGS_TAB), settings: readTab_(ss, SETTINGS_TAB), sites: sitesKey && sitesKey === sk ? null : readTab_(ss, SITES_TAB), sitesKey: sk, markets: {}, locations: {}, models: [], tz: ss.getSpreadsheetTimeZone(), book: ss.getName() };
+    lookup: readTab_(ss, 'Lookup'), consList: readTab_(ss, CONS_LIST_TAB), chatParts: readTab_(ss, CHAT_PARTS_TAB), chatSettings: readTab_(ss, CHAT_SETTINGS_TAB), settings: readTab_(ss, SETTINGS_TAB), sites: sitesKey && sitesKey === sk ? null : readTab_(ss, SITES_TAB), sitesKey: sk, markets: {}, locations: {}, models: [], tz: ss.getSpreadsheetTimeZone(), book: ss.getName() };
   Object.keys(MARKETS).forEach(function (m) {
     var c = MARKETS[m];
-    out.markets[m] = { tags: readTab_(ss, c.tags), bad: readTab_(ss, c.bad), inv: readTab_(ss, c.inv) };
+    out.markets[m] = { tags: readTab_(ss, c.tags), bad: readTab_(ss, c.bad), inv: readTab_(ss, c.inv), cons: readTab_(ss, c.cons) };
     out.locations[m] = listFromValidation_(ss, c.inv, 'D2');
   });
   out.models = listFromValidation_(ss, MARKETS.AU.inv, 'B3');
@@ -267,6 +269,47 @@ function submitRedTag(token, f) {
     lock.releaseLock();
   }
 }
+/** A consumable used on a swap (jumper, fiber, SFP). No serial; it's ordered on CHAT like a red tag. */
+function submitConsumable(token, f) {
+  var ss = book_(), user = actAs_(ss, who_(ss, token), f.as), c = market_(f.market);
+  if (user.forName) f.notes = (f.notes ? f.notes + ' · ' : '') + 'Logged by ' + user.name + ' for ' + user.forName;
+  ['site', 'ticket', 'item', 'reason', 'sector', 'notes'].forEach(function (k) {
+    if (!String(f[k] || '').trim()) throw new Error('MISSING:' + k);
+  });
+  var qty = Math.floor(Number(f.qty));
+  if (!(qty >= 1 && qty <= 50)) throw new Error('BAD_QTY');
+  var photo = f.photo && f.photo.data ? savePhoto_(f.photo, f.site + ' ' + f.item + ' consumable') : '';
+  var lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    var sh = ss.getSheetByName(c.cons);
+    if (!sh) throw new Error('NO_TAB:' + c.cons);
+    var h = headers_(sh), row = blankRow_(h.length);
+    var put = function (name, value) { var i = findCol_(h, [name]); if (i >= 0) row[i] = value; };
+    put('TIMESTAMP', new Date()); put('SITE ID', f.site); put('INC #', f.ticket); put('CATEGORY', f.cat || '');
+    put('CONSUMABLE', f.item); put('PART NAME', f.part || ''); put('QTY', qty); put('FAILURE REASON', f.reason);
+    put('SECTOR', String(f.sector).toUpperCase()); put('ALARM NOTES', f.notes); put('EMAIL ADDRESS', user.email); put('PHOTO', photo);
+    put('ORDER SUBMITTED', false);
+    var r = nextRow_(sh, 1);
+    sh.getRange(r, 1, 1, row.length).setValues([row]);
+    addSite_(ss, f.site, f.market, user);
+    return JSON.stringify({ ok: true, row: r });
+  } finally {
+    lock.releaseLock();
+  }
+}
+/** Manager marks a consumable's CHAT order submitted (or undoes it). */
+function setConsOrdered(token, market, row, value) {
+  var ss = book_(), user = who_(ss, token), c = market_(market);
+  requireManager_(user);
+  var sh = ss.getSheetByName(c.cons);
+  if (!sh || row < 2 || row > sh.getLastRow()) throw new Error('NOT_FOUND');
+  sh.getRange(row, ensureCol_(sh, 'ORDER SUBMITTED')).setValue(!!value);
+  sh.getRange(row, ensureCol_(sh, 'ORDER MARKED BY')).setValue(value ? user.email + ' · ' + stamp_(ss) : '');
+  sh.getRange(row, ensureCol_(sh, 'ORDERED ON')).setValue(value ? new Date() : '');
+  return JSON.stringify({ ok: true, row: row });
+}
+
 function pullToInventory_(ss, user, c, d) {
   var sn = norm_(d.sn);
   if (!/^[A-Z0-9]{6,20}$/.test(sn)) return null;
@@ -733,7 +776,31 @@ function applyResting_(ss) {
  * Adds models and product codes the sheet doesn't have yet (Settings, Lookup, model dropdowns).
  * Runs once by itself after a release that changes MODELS_REV. Never changes numbers already on the Settings tab.
  */
-var MODELS_REV = '3';
+var MODELS_REV = '4';
+/** Consumables: parts ordered on CHAT with no serial (jumpers, fiber, SFPs). Editable on the Consumables List tab. */
+var CONS_LIST_TAB = 'Consumables List';
+var CONS_LIST_HEADERS = ['NAME', 'CATEGORY', 'PART NAME', 'PRODUCT CODE', 'TECHNOLOGIES', 'AU RESTING STOCK', 'HN RESTING STOCK'];
+var CONS_HEADERS = ['TIMESTAMP', 'SITE ID', 'INC #', 'CATEGORY', 'CONSUMABLE', 'PART NAME', 'QTY', 'FAILURE REASON', 'SECTOR', 'ALARM NOTES', 'EMAIL ADDRESS', 'PHOTO', 'ORDER SUBMITTED', 'ORDER MARKED BY', 'ORDERED ON'];
+var CONS_LIST = [
+  ["8' 4.3-10 to 4.3-10 RF JUMPER", 'RF Jumpers', '34431 BOOTED JMPR 8ft 4.3-10-4.3-10 REP 33287', ''],
+  ["8' DM to 4.3-10 RF JUMPER", 'RF Jumpers', "33292 JUMPER 8' FOAM 4.3-10 TO DM", ''],
+  ["15' SQUID FIBER AHLOA/AHFIG", 'Fiber Jumpers', '34592 5M Fiber AHLOA/AHFIG To 6/24 ODC-R2TC', ''],
+  ["15' SQUID FIBER AHLOB/AHFII", 'Fiber Jumpers', '34595 5M Fiber AHLOB/AHFII to 6/24 ODC-AOPC', ''],
+  ["15' SQUID FIBER AEHC", 'Fiber Jumpers', '34598 5M Fiber AEHC to 6/24 ODC-AOPE', 'L2500, N2500'],
+  ["15' AHLOA HYBRID 2.0", 'Fiber Jumpers', "33952 15' HCS 2.0 TOP JMP 6AWG AIRSC REP 33758", 'L700, N600'],
+  ["30' AHLOA HYBRID 2.0", 'Fiber Jumpers', "33760 30' HCS 2.0 TOP JMPR 6AWG 2 FP AIRSCALE", 'L700, N600'],
+  ["15' AHFIG HYBRID 2.0", 'Fiber Jumpers', "34088 15' HCS 2.0 TOP JMPR 6AWG 2P AHFIG", 'L1900, L2100'],
+  ["30' AHFIG HYBRID 2.0", 'Fiber Jumpers', "34089 30' HCS 2.0 TOP JMPR 6AWG 2P AHFIG", 'L1900, L2100'],
+  ["15' AEHC HYBRID 2.0", 'Fiber Jumpers', "34174 15' HCS 2.0 TOP JMPR 6AWG 4 FP AEHC", 'L2500, N2500'],
+  ["30' AEHC HYBRID 2.0", 'Fiber Jumpers', "34175 30' HCS 2.0 TOP JMPR 6AWG 4 FP AEHC", 'L2500, N2500'],
+  ["15' FXFB HYBRID 2.0", 'Fiber Jumpers', "33921 15' HCS 2.0 TOP JMP 10AWG FXFB FRIEV202", 'U1900, L1900'],
+  ["30' FXFB HYBRID 2.0", 'Fiber Jumpers', "33922 30' HCS 2.0 TOP JMP 6AWG FXFB FRIEV202", 'U1900, L1900'],
+  ["15' AHFII HYBRID 2.0", 'Fiber Jumpers', "34579 15' HCS 2.0 TOP JMPR 3FP AHFII AHLOB", 'L1900, L2100'],
+  ["30' AHFII HYBRID 2.0", 'Fiber Jumpers', "34580 30' HCS 2.0 TOP JMPR 3FP AHFII AHLOB", 'L1900, L2100'],
+  ["35' 6P BOTTOM FIBER", 'Fiber Jumpers', "33600 35' BOTTOM JMPR W/ 6 FIBER PR AIRSCALE", ''],
+  ["15' AVHA HYBRID 2.0", 'Fiber Jumpers', "39750 15' HCS 2.0 JMPR 6AWG 4FP AVHA AOPC-APPG", 'L2500, N2500'],
+  ["30' AVHA HYBRID 2.0", 'Fiber Jumpers', "39751 30' HCS 2.0 JMPR 6AWG 4FP AVHA AOPC-APPG", 'L2500, N2500'],
+  ['1310 SFP', 'SFPs', '33592 SM 1.4km SFP 1310nm CPRI 9.8G', 'L700, L1900']];
 /** CHAT order form: the T-Mobile part (SAP # + name) and technologies for each model. Editable on the CHAT Parts tab. */
 var CHAT_PARTS_TAB = 'CHAT Parts', CHAT_SETTINGS_TAB = 'CHAT Settings';
 var CHAT_PARTS = [
@@ -785,6 +852,19 @@ function addNewModels_(ss) {
       cs.getRange(1, 1, 1, 3).setFontWeight('bold');
       cs.getRange('A6').setValue('Type the phone number for each market in row 4. It goes on every CHAT order for that market.');
     }
+    var cl = ss.getSheetByName(CONS_LIST_TAB);
+    if (!cl) {
+      cl = ss.insertSheet(CONS_LIST_TAB);
+      cl.getRange(1, 1, 1, CONS_LIST_HEADERS.length).setValues([CONS_LIST_HEADERS]).setFontWeight('bold');
+      cl.getRange(2, 1, CONS_LIST.length, 7).setValues(CONS_LIST.map(function (x) { return [x[0], x[1], x[2], '', x[3], '', '']; }));
+    }
+    Object.keys(MARKETS).forEach(function (m) {
+      var cs2 = ss.getSheetByName(MARKETS[m].cons);
+      if (cs2) return;
+      cs2 = ss.insertSheet(MARKETS[m].cons);
+      cs2.getRange(1, 1, 1, CONS_HEADERS.length).setValues([CONS_HEADERS]).setFontWeight('bold');
+      cs2.setFrozenRows(1);
+    });
     props.setProperty('MODELS_REV', MODELS_REV);
   } finally {
     lock.releaseLock();

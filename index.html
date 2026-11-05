@@ -154,7 +154,7 @@ td .lowtag{font-size:11px;background:var(--warn-soft);color:var(--warn);border-r
 
 nav.tabs{position:fixed;left:0;right:0;bottom:0;z-index:6;background:var(--surface);border-top:1px solid var(--line);
   padding:6px var(--gut-r) calc(6px + env(safe-area-inset-bottom,0px)) var(--gut-l)}
-.tabs-in{max-width:880px;margin:0 auto;display:grid;grid-template-columns:repeat(4,1fr);gap:4px}
+.tabs-in{max-width:880px;margin:0 auto;display:grid;grid-template-columns:repeat(5,1fr);gap:2px}
 .tabs button{background:none;border:0;border-radius:10px;padding:6px 4px;display:grid;justify-items:center;gap:2px;font-size:12px;font-weight:500;color:var(--muted);cursor:pointer;position:relative}
 .tabs button svg{width:22px;height:22px}
 .tabs button[aria-current="page"]{color:var(--head);background:var(--chip);box-shadow:inset 0 3px 0 var(--accent)}
@@ -299,6 +299,7 @@ body{padding-top:env(safe-area-inset-top,0px)}
     <button type="button" data-view="inventory"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7l9-4 9 4-9 4z"/><path d="M3 7v10l9 4 9-4V7"/><path d="M12 11v10"/></svg>Inventory</button>
     <button type="button" data-view="install"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v12"/><path d="M8 21h8"/><path d="M9 21l3-12 3 12"/><circle cx="12" cy="7" r="1.6"/><path d="M8.5 3.5a5 5 0 0 0 0 7"/><path d="M15.5 3.5a5 5 0 0 1 0 7"/></svg>Install</button>
     <button type="button" data-view="tags"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3h13v18H8l-5-5V8z"/><circle cx="8.5" cy="12" r="1.6"/></svg>Red tags<span class="badge" id="openBadge" hidden></span></button>
+    <button type="button" data-view="cons"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20c0-6 4-6 8-8s8-2 8-8"/><rect x="2" y="18" width="5" height="4" rx="1"/><rect x="17" y="2" width="5" height="4" rx="1"/></svg>Consumables<span class="badge" id="consBadge" hidden></span></button>
   </div>
 </nav>
 <div id="toastHost"></div>
@@ -399,6 +400,7 @@ function errText(e){
   if(m.indexOf("NO_TAB:")>=0) return "The sheet is missing the \""+after("NO_TAB:")+"\" tab. Run setupTabs again.";
   if(m.indexOf("MISSING:photo")>=0) return "Add a photo of the serial tag.";
   if(m.indexOf("MISSING:notes")>=0) return "Add the alarm notes.";
+  if(m.indexOf("BAD_QTY")>=0) return "Quantity must be a number from 1 to 50.";
   if(m.indexOf("MISSING:")>=0) return "A required field is empty.";
   if(m.indexOf("AUTH")>=0) return "Please sign in again.";
   if(m.indexOf("Lock")>=0||m.indexOf("lock")>=0) return "Someone else is saving right now. Try again in a few seconds.";
@@ -423,6 +425,9 @@ function build(r){
   if(r.settings&&r.settings.length>1){ var sh=r.settings[0].map(H), mi=hidx(sh,["MODEL"]), am=hidx(sh,["AU RESTING STOCK","AU MIN SPARES"]), hm=hidx(sh,["HN RESTING STOCK","HN MIN SPARES"]);
     out.targets={AU:{total:0,models:{}},HN:{total:0,models:{}}};
     r.settings.slice(1).forEach(function(x){ var md=H(x[mi]); if(!md) return; [["AU",am],["HN",hm]].forEach(function(p){ var n=parseInt(x[p[1]],10); if(isNaN(n)) return; if(/^ALL MODELS/.test(md)) out.targets[p[0]].total=n; else out.targets[p[0]].models[md]=n; }); }); }
+  out.cons=[];
+  if(r.consList&&r.consList.length>1){ var ch2=r.consList[0].map(H), cn2=hidx(ch2,["NAME"]), cc2=hidx(ch2,["CATEGORY"]), cp2=hidx(ch2,["PART NAME"]), ct2=hidx(ch2,["TECHNOLOGIES"]);
+    r.consList.slice(1).forEach(function(x){ var n=S(x[cn2]); if(n) out.cons.push({name:n,cat:S(x[cc2])||"Other",part:S(x[cp2]),tech:ct2>=0?S(x[ct2]):""}); }); }
   out.sites={AU:[],HN:[]};
   if(r.sites&&r.sites.length>1){ var sh2=r.sites[0].map(H), si=hidx(sh2,["SITE ID"]), sm=hidx(sh2,["MARKET"]), sa=hidx(sh2,["AREA"]), seen={};
     r.sites.slice(1).forEach(function(x){ var id=SN(x[si]); if(!id||seen[id]) return; var m=H(x[sm]); if(!MARKETS[m]) m=/^[A-Z]{2}\d/.test(id)?"AU":"HN"; id=normSite(id,m); seen[id]=1;
@@ -432,7 +437,11 @@ function build(r){
   return out;
 }
 function buildMarket(m,t){
-  var res={inv:null,tags:[]};
+  var res={inv:null,tags:[],cons:[]};
+  if(t.cons&&t.cons.length>1){ var q=t.cons[0].map(H), ci=function(n){ return hidx(q,[n]); }, k2={ts:ci("TIMESTAMP"),site:ci("SITE ID"),inc:ci("INC #"),cat:ci("CATEGORY"),it:ci("CONSUMABLE"),pt:ci("PART NAME"),qty:ci("QTY"),rs:ci("FAILURE REASON"),sec:ci("SECTOR"),nt:ci("ALARM NOTES"),by:ci("EMAIL ADDRESS"),ph:ci("PHOTO"),ord:ci("ORDER SUBMITTED"),on:ci("ORDERED ON")};
+    res.cons=t.cons.slice(1).map(function(x,i){ var d=toDate(x[k2.ts]), site=S(x[k2.site]), it=S(x[k2.it]); if(!d||!site||!it) return null;
+      var o=x[k2.ord]; return {row:i+2,date:d,site:normSite(site,m),ticket:S(x[k2.inc]).toUpperCase(),cat:S(x[k2.cat]),item:it,part:S(x[k2.pt]),qty:parseInt(x[k2.qty],10)||1,reason:S(x[k2.rs]),sector:H(x[k2.sec]),notes:S(x[k2.nt]),
+        by:nameOf(x[k2.by]),photo:/^https:\/\//.test(S(x[k2.ph]))?S(x[k2.ph]):"",ordered:o===true||H(o)==="TRUE",orderedOn:k2.on>=0?toDate(x[k2.on]):null}; }).filter(Boolean).sort(function(a,b){return b.date-a.date;}); }
   if(t.inv&&t.inv.length){
     var h=t.inv[0].map(H), c={st:hidx(h,["STATUS"]),md:hidx(h,["RADIO"]),nt:hidx(h,["NOTES"]),loc:hidx(h,["LOCATION"]),sn:hidx(h,["SERIAL NUMBER"]),scan:hidx(h,["SCANNED SN"]),as:hidx(h,["ASSET NUMBER"]),sas:hidx(h,["SCANNED ASSET"]),by:hidx(h,["LAST MOVED BY"]),at:hidx(h,["LAST MOVED"]),ds:hidx(h,["DATE OF SCAN"]),rma:hidx(h,["RMA #"]),sh:hidx(h,["SHIPPED"]),ph:hidx(h,["INSTALL PHOTO"])};
     res.inv=t.inv.slice(1).map(function(x,i){
@@ -499,6 +508,8 @@ function flags(m){
       models.forEach(function(md){ var c=inv.filter(function(r){return r.model===md&&isSpare(r);}).length; if(c<(md==="AHLOB"?1:md==="FXFB"||md==="AVHA"?0:2)) out.push({crit:c===0,title:md+": "+(c===0?"no spares":"only 1 spare")+" on hand",detail:"Restock before the next swap."}); });
     }
   }
+  var oc=data[m].cons.filter(function(x){return !x.ordered;});
+  if(oc.length) out.push({crit:false,title:plural(oc.length,"consumable")+" still need"+(oc.length===1?"s":"")+" a CHAT order",detail:"Oldest is "+oc[oc.length-1].item+" at "+oc[oc.length-1].site+" from "+fmtDate(oc[oc.length-1].date)+". Mark order submitted on the Consumables tab once it's in."});
   return out.sort(function(a,b){return b.crit-a.crit;});
 }
 function locsFor(m){
@@ -551,12 +562,14 @@ function setViewAs(email){ viewAs=email||""; store.set("rtt-viewas",viewAs); set
 function wireRefresh(){ var ex=document.getElementById("exitPreview"); if(ex) ex.onclick=function(){ setViewAs(""); toast("Back to your view"); };
   var rb=document.getElementById("refreshBtn"); if(rb) rb.onclick=function(){ toast("Refreshing…"); load(true).then(function(){ if(!state.msg) toast("Up to date"); }); }; }
 function refreshLive(){ var l=document.getElementById("liveLine"); if(!l) return; var b=l.nextElementSibling; if(b&&b.classList.contains("banner")) b.parentNode.removeChild(b); var tmp=document.createElement("div"); tmp.innerHTML=liveLine(); while(tmp.lastChild) l.parentNode.insertBefore(tmp.lastChild,l.nextSibling); l.parentNode.removeChild(l); wireRefresh(); }
-function updateBadge(){ var b=document.getElementById("openBadge"); var n=data? data[cur].tags.filter(function(t){return t.ordered===false;}).length : 0; b.hidden=!n; b.textContent=n; }
+function updateBadge(){ var b=document.getElementById("openBadge"); var n=data? data[cur].tags.filter(function(t){return t.ordered===false;}).length : 0; b.hidden=!n; b.textContent=n;
+  var c=document.getElementById("consBadge"), k=data? data[cur].cons.filter(function(x){return !x.ordered;}).length : 0; c.hidden=!k; c.textContent=k; }
 /** New data arrived: refresh lists without wiping a form someone is filling in. */
 function onData(){ updateBadge(); chrome();
   if(curView==="inventory"&&document.getElementById("xfForm")){ drawInv(); drawCheck(); refreshLive(); return; }
   if(curView==="install"&&document.getElementById("inForm")){ drawInstalled(); refreshLive(); return; }
   if(curView==="tags"&&document.getElementById("logForm")){ drawTags(); refreshLive(); return; }
+  if(curView==="cons"&&document.getElementById("consForm")){ drawCons(); refreshLive(); return; }
   render(); }
 
 /* sign-in */
@@ -596,7 +609,7 @@ function viewSignIn(){
 function viewDashboard(){
   var d=data[cur], inv=d.inv, tg=d.tags, fl=flags(cur), now=new Date();
   var thisMonth=tg.filter(function(t){return t.date.getFullYear()===now.getFullYear()&&t.date.getMonth()===now.getMonth();}).length;
-  var open=tg.filter(function(t){return t.ordered===false;}).length, spares=inv?inv.filter(isSpare).length:null, installed=inv?inv.filter(function(r){return r.loc==="SITE";}).length:0;
+  var openCons=d.cons.filter(function(x){return !x.ordered;}).length, open=tg.filter(function(t){return t.ordered===false;}).length+openCons, spares=inv?inv.filter(isSpare).length:null, installed=inv?inv.filter(function(r){return r.loc==="SITE";}).length:0;
   var table="";
   if(inv&&inv.length){
     var locs=locsFor(cur).filter(function(l){ return NOT_SPARE.indexOf(l)<0&&inv.some(function(r){return r.loc===l&&isSpare(r);}); });
@@ -975,19 +988,25 @@ function drawTags(){
   sec.innerHTML='<div class="sec-h"><h2>'+esc(MARKETS[cur].name)+' red tags</h2><p>'+plural(tg.length,'tag')+'</p></div>'+
     '<div class="chips" id="tagChips"><button type="button" class="chip" data-f="open" aria-pressed="'+(tagFilter==="open")+'">Needs order ('+n.open+')</button><button type="button" class="chip" data-f="ordered" aria-pressed="'+(tagFilter==="ordered")+'">Order submitted ('+n.ordered+')</button><button type="button" class="chip" data-f="all" aria-pressed="'+(tagFilter==="all")+'">All</button></div>'+
     '<div class="tags" id="tagList">'+(list.length? list.map(tagCard).join("") : '<div class="empty">'+(tg.length?'Nothing here right now.':'No red tags yet. Log the first one above.')+'</div>')+'</div>'+
-    (isMgr?(n.open?'<div class="t3"><button class="btn sm" type="button" id="chatExport">Export CHAT ('+n.open+')</button><span class="hint">Open orders as a file for the CHAT Request Form macro</span></div>':''):'<p class="note">Managers mark orders submitted.</p>');
+    chatExportHtml(n.open);
   var ce=document.getElementById("chatExport"); if(ce) ce.onclick=exportChat;
 }
+/** Export CHAT button (managers): red tags and consumables still needing an order go out in one file. */
+function chatExportHtml(nTags){ if(!isMgr) return '<p class="note">Managers mark orders submitted.</p>';
+  var nc=data[cur].cons.filter(function(x){return !x.ordered;}).length, tot=(nTags==null?data[cur].tags.filter(function(t){return tagState(t)==="open";}).length:nTags)+nc;
+  return tot?'<div class="t3" style="flex-direction:column;align-items:flex-start;gap:6px"><button class="btn sm" type="button" id="chatExport">Export CHAT ('+tot+')</button><span class="hint">Red tags and consumables that need an order, as one file for the CHAT Request Form macro</span></div>':''; }
 /** Open red tags as a CSV that the "Pull red tags" macro in the CHAT Request Form reads. */
 function exportChat(){
-  var set=data.chat.set[cur]||{}, parts=data.chat.parts, open=data[cur].tags.filter(function(t){ return tagState(t)==="open"; }).slice().reverse();
+  var set=data.chat.set[cur]||{}, parts=data.chat.parts, open=data[cur].tags.filter(function(t){ return tagState(t)==="open"; }).slice().reverse(), oc=data[cur].cons.filter(function(x){ return !x.ordered; }).slice().reverse();
   var clean=function(v){ return S(v).replace(/[\r\n]+/g," ").replace(/\u00b7/g,"-").replace(/[^\x20-\x7E]/g,""); };
   var q=function(v){ v=clean(v); return /[",]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v; };
-  var head=["SITE ID","INC","MODEL","PART NAME","SERIAL","ASSET TAG","FAIL REASON","SECTOR","TECHNOLOGIES","ALARM NOTES","GC","PICKUP","PHONE","FREQUENCY","DATE"];
+  var head=["SITE ID","INC","MODEL","PART NAME","SERIAL","ASSET TAG","FAIL REASON","SECTOR","TECHNOLOGIES","ALARM NOTES","GC","PICKUP","PHONE","FREQUENCY","DATE","QTY"];
   var noPart=[], noSec=[];
   var rows=open.map(function(t){ var p=parts[t.model]||{}; if(!p.part) noPart.push(t.model||"?"); if(!t.sector) noSec.push(t.site);
     var notes=t.notes.replace(/\s*\u00b7\s*Typed by hand:.*$/,"").replace(/\s*\u00b7\s*Logged by .*$/,"");
-    return [t.site,t.ticket,t.model,p.part||"",t.badSn,t.asset==="NA"?"":t.asset,t.reason,t.sector,p.tech||"",notes,set["GC"]||"",set["PICKUP LOCATION"]||"",set["PHONE"]||"","Continuous",fmtDate(t.date)].map(q).join(","); });
+    return [t.site,t.ticket,t.model,p.part||"",t.badSn,t.asset==="NA"?"":t.asset,t.reason,t.sector,p.tech||"",notes,set["GC"]||"",set["PICKUP LOCATION"]||"",set["PHONE"]||"","Continuous",fmtDate(t.date),1].map(q).join(","); });
+  oc.forEach(function(x){ var li=data.cons.filter(function(c){return c.name===x.item;})[0]||{}; var part=x.part||li.part||""; if(!part) noPart.push(x.item);
+    rows.push([x.site,x.ticket,x.item,part,"","",x.reason,x.sector,li.tech||"",x.notes.replace(/\s*\u00b7\s*Logged by .*$/,""),set["GC"]||"",set["PICKUP LOCATION"]||"",set["PHONE"]||"","Continuous",fmtDate(x.date),x.qty].map(q).join(",")); });
   var csv=head.join(",")+"\r\n"+rows.join("\r\n")+"\r\n";
   var a=document.createElement("a"), d=new Date(), stamp=d.getFullYear()+"-"+("0"+(d.getMonth()+1)).slice(-2)+"-"+("0"+d.getDate()).slice(-2);
   a.href=URL.createObjectURL(new Blob([csv],{type:"text/csv"})); a.download="CHAT_"+cur+"_"+stamp+".csv"; document.body.appendChild(a); a.click();
@@ -995,7 +1014,7 @@ function exportChat(){
   var warn=[]; if(noPart.length) warn.push("no CHAT part for "+noPart.filter(function(x,i,a){return a.indexOf(x)===i;}).join(", "));
   if(noSec.length) warn.push("no sector on "+noSec.length+" older tag"+(noSec.length>1?"s":""));
   if(!set["PHONE"]) warn.push("no phone on the CHAT Settings tab");
-  toast(plural(rows.length,"order")+" exported"+(warn.length?". Check: "+warn.join("; "):""));
+  toast(plural(open.length,"red tag")+(oc.length?" and "+plural(oc.length,"consumable"):"")+" exported"+(warn.length?". Check: "+warn.join("; "):""));
 }
 function tagCard(t){
   var ph=t.photos.map(function(p){return '<a href="'+esc(p.url)+'" target="_blank" rel="noopener">'+esc(p.label)+' photo</a>';}).join("");
@@ -1579,7 +1598,70 @@ function checkBad(){ var el=document.getElementById("lBad"), h=document.getEleme
 function shrink(file){ return new Promise(function(res,rej){ var url=URL.createObjectURL(file), img=new Image(); img.onload=function(){ var s=Math.min(1,1600/Math.max(img.width,img.height)), c=document.createElement("canvas"); c.width=Math.round(img.width*s); c.height=Math.round(img.height*s); c.getContext("2d").drawImage(img,0,0,c.width,c.height); URL.revokeObjectURL(url); res(c.toDataURL("image/jpeg",.82).split(",")[1]); }; img.onerror=function(){ URL.revokeObjectURL(url); rej(new Error("read")); }; img.src=url; }); }
 
 /* ---------- navigation ---------- */
-var VIEWS={dashboard:viewDashboard,inventory:viewInventory,install:viewInstall,tags:viewTags};
+var VIEWS={dashboard:viewDashboard,inventory:viewInventory,install:viewInstall,tags:viewTags,cons:viewCons};
+/* ---------- consumables (jumpers, fiber, SFPs: no serial) ---------- */
+var consFilter="open";
+function viewCons(){
+  photos={};
+  var cats={}; data.cons.forEach(function(c){ (cats[c.cat]=cats[c.cat]||[]).push(c); });
+  var opts=Object.keys(cats).map(function(k){ return '<optgroup label="'+esc(k)+'">'+cats[k].map(function(c){ return '<option value="'+esc(c.name)+'">'+esc(c.name)+'</option>'; }).join("")+'</optgroup>'; }).join("");
+  app.innerHTML=liveLine()+'<section><div class="sec-h"><h2>Consumables used</h2><p>'+(viewMember()?'Adds it as you, for '+esc(viewMember().name):'Jumpers, fiber and SFPs. Nothing to scan')+'</p></div><form id="consForm" novalidate>'+
+    '<div id="cErr" class="formerr" hidden></div>'+
+    '<div class="f2">'+siteField("cSite")+
+      '<label>Ticket (INC #)<input id="cTicket" type="text" class="mono" placeholder="INC130236867" autocomplete="off" autocapitalize="characters"><span class="hint"></span></label></div>'+
+    '<div class="f2"><label>Consumable<select id="cItem"><option value="">'+(opts?'Choose consumable':'No list yet (Consumables List tab)')+'</option>'+opts+'</select><span class="hint" id="cItemHint"></span></label>'+
+      '<label>Quantity used<input id="cQty" type="number" inputmode="numeric" min="1" max="50" value="1"><span class="hint"></span></label>'+
+      '<label>Failure reason<select id="cReason"><option value="">Choose reason</option>'+REASONS.map(function(r){return '<option>'+esc(r)+'</option>';}).join("")+'</select><span class="hint"></span></label>'+
+      '<label>Sector<select id="cSector"><option value="">Choose sector</option>'+SECTORS.map(function(x){return '<option value="'+x+'">'+title(x)+'</option>';}).join("")+'</select><span class="hint"></span></label></div>'+
+    '<label>Alarm notes (required)<textarea id="cNotes" placeholder="Damaged jumper on port 2, water in connector…"></textarea></label>'+
+    '<div class="photos"><label>Photo (optional)<input id="cPh" type="file" accept="image/*" hidden><span class="btn quiet sm" role="button" tabindex="0" id="cPhB">Add photo</span><img class="thumb" id="cPhP" alt="Consumable photo" hidden></label></div>'+
+    '<div class="actions"><button class="btn red" type="submit" id="cBtn">Log consumable</button></div></form></section><section id="consSec"></section>';
+  var $=function(id){return document.getElementById(id);};
+  wireSite("cSite");
+  $("cItem").addEventListener("change",function(){ var c=data.cons.filter(function(x){return x.name===$("cItem").value;})[0]; $("cItemHint").textContent=c&&c.part?c.part:""; });
+  var openPh=function(e){ if(e) e.preventDefault(); $("cPh").click(); };
+  $("cPhB").addEventListener("click",openPh);
+  $("cPh").addEventListener("change",function(){ var f=$("cPh").files[0]; if(!f) return; shrink(f).then(function(d){ photos.cons=d; $("cPhP").src="data:image/jpeg;base64,"+d; $("cPhP").hidden=false; $("cPhB").textContent="Replace photo"; }).catch(function(){ toast("That photo couldn't be read. Try another."); }); });
+  $("consForm").addEventListener("submit",function(e){ e.preventDefault();
+    var err=$("cErr"), show=function(m){ err.hidden=false; err.textContent=m; err.scrollIntoView({block:"center",behavior:"smooth"}); };
+    var rs=resolveSite($("cSite").value), site=rs.site, tk=S($("cTicket").value).toUpperCase(), ticket=/^\d+$/.test(tk)?"INC"+tk:tk;
+    var item=$("cItem").value, qty=parseInt($("cQty").value,10), reason=$("cReason").value, sector=$("cSector").value, notes=S($("cNotes").value);
+    var miss=[]; if(!site) miss.push("site ID"); if(!ticket) miss.push("ticket number"); if(!item) miss.push("consumable"); if(!reason) miss.push("failure reason"); if(!sector) miss.push("sector"); if(!notes) miss.push("alarm notes");
+    if(rs.error) return show(rs.error);
+    if(miss.length) return show("Add "+miss.join(", ")+".");
+    if(!(qty>=1&&qty<=50)) return show("Quantity must be a number from 1 to 50.");
+    var c=data.cons.filter(function(x){return x.name===item;})[0]||{};
+    var btn=$("cBtn"); btn.disabled=true; btn.textContent="Saving…"; err.hidden=true;
+    var f={as:asWho(),market:cur,site:site,ticket:ticket,item:item,cat:c.cat||"",part:c.part||"",qty:qty,reason:reason,sector:sector,notes:notes,photo:photos.cons?{data:photos.cons,mime:"image/jpeg"}:null};
+    save("submitConsumable",[token,f],qty+" × "+item+" at "+site).then(function(r){ consFilter="open"; return load(true).then(function(){ render();
+        savedMsg(r,qty+" × "+item+" logged for "+site+"."); var t=document.getElementById("consSec"); if(t) t.scrollIntoView({behavior:"smooth"}); }); })
+      .catch(function(e2){ if(isAuthErr(e2)) return signedOut("Sign in again to continue."); show(errText(e2)); btn.disabled=false; btn.textContent="Log consumable"; });
+  });
+  drawCons();
+  $("consSec").addEventListener("click",function(e){
+    var ch=e.target.closest(".chip"); if(ch){ consFilter=ch.dataset.f; drawCons(); return; }
+    var o=e.target.closest("[data-corder]"); if(!o) return;
+    var x=data[cur].cons.filter(function(y){return String(y.row)===o.dataset.corder;})[0]; if(!x) return; var val=o.dataset.val==="1"; o.disabled=true; o.textContent="Saving…";
+    run("setConsOrdered",token,cur,x.row,val).then(function(){ toast(val?"Order submitted for "+x.qty+" × "+x.item:x.item+" moved back to open"); return load(true); })
+      .catch(function(err){ if(isAuthErr(err)) return signedOut("Sign in again to continue."); toast(errText(err)); o.disabled=false; o.textContent=val?"Mark order submitted":"Undo"; });
+  });
+}
+function drawCons(){
+  var sec=document.getElementById("consSec"); if(!sec) return;
+  var cs=data[cur].cons, n={open:0,ordered:0}; cs.forEach(function(x){ n[x.ordered?"ordered":"open"]++; });
+  if(consFilter!=="all"&&!n[consFilter]) consFilter=n.open?"open":"all";
+  var list=cs.filter(function(x){ return consFilter==="all"||(consFilter==="open")===!x.ordered; });
+  sec.innerHTML='<div class="sec-h"><h2>'+esc(MARKETS[cur].name)+' consumables</h2><p>'+(cs.length+' '+(cs.length===1?'entry':'entries'))+'</p></div>'+
+    '<div class="chips"><button type="button" class="chip" data-f="open" aria-pressed="'+(consFilter==="open")+'">Needs order ('+n.open+')</button><button type="button" class="chip" data-f="ordered" aria-pressed="'+(consFilter==="ordered")+'">Order submitted ('+n.ordered+')</button><button type="button" class="chip" data-f="all" aria-pressed="'+(consFilter==="all")+'">All</button></div>'+
+    '<div class="tags">'+(list.length? list.map(function(x){
+      var st=x.ordered? '<span class="pill good">Order submitted'+(x.orderedOn?' '+esc(fmtDate(x.orderedOn)):'')+'</span>'+(isMgr?'<button class="btn quiet sm" type="button" data-corder="'+x.row+'" data-val="0">Undo</button>':'')
+        : '<span class="pill bad">Order not submitted</span>'+(isMgr?'<button class="btn red sm" type="button" data-corder="'+x.row+'" data-val="1">Mark order submitted</button>':'');
+      return '<article class="tag'+(x.ordered?" done":"")+'"><div class="t1"><span class="site">'+esc(x.site)+'</span><span class="model">'+x.qty+' ×</span><span class="date">'+fmtDate(x.date)+(x.by?" · "+esc(x.by):"")+'</span></div>'+
+        '<dl><dt>Part</dt><dd>'+esc(x.item)+'</dd>'+(x.sector?'<dt>Sector</dt><dd>'+esc(title(x.sector))+'</dd>':'')+'<dt>Reason</dt><dd>'+esc(x.reason)+(x.notes?" · "+esc(x.notes):"")+'</dd><dt>Ticket</dt><dd class="mono">'+esc(x.ticket)+'</dd></dl>'+
+        '<div class="t3">'+st+(x.photo?'<a href="'+esc(x.photo)+'" target="_blank" rel="noopener">Photo</a>':'')+'</div></article>'; }).join("") : '<div class="empty">'+(cs.length?'Nothing here right now.':'No consumables logged yet.')+'</div>')+'</div>'+
+    chatExportHtml();
+  var ce=document.getElementById("chatExport"); if(ce) ce.onclick=exportChat;
+}
 var curView="dashboard";
 function go(v){ if(v==="log") v="tags"; if(v==="spares") v="inventory"; if(!VIEWS[v]) v="dashboard"; curView=v; [].forEach.call(document.querySelectorAll(".tabs button"),function(b){ b.setAttribute("aria-current",b.dataset.view===v?"page":"false"); }); render(); window.scrollTo(0,0); }
 document.querySelector(".tabs").addEventListener("click",function(e){ var b=e.target.closest("button[data-view]"); if(b&&state.phase!=="signin") go(b.dataset.view); });
