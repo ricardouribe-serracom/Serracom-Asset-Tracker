@@ -827,7 +827,7 @@ function drawInv(){
       '<div class="sub"><span>'+esc(where)+esc(movedLine(r))+'</span>'+(r.asset&&r.asset!=="NA"?'<span class="mono">'+esc(r.asset)+'</span>':"")+'</div>'+
       (isMgr?'<select class="move" data-sn="'+esc(r.sn)+'" data-row="'+r.row+'" aria-label="Move '+esc(r.sn)+'">'+(r.loc==="NO LOCATION"?'<option value="" selected>No location</option>':"")+locs.filter(function(l){return l!=="NO LOCATION";}).map(function(l){return '<option value="'+esc(l)+'"'+(l===r.loc?" selected":"")+'>'+esc(title(l))+'</option>';}).join("")+
         '<option value="__status">'+(r.status==="GOOD"?"Mark bad":"Mark good")+'</option><option value="__market">Move to '+other+' inventory</option></select>'
-        : '')+'</div>'; }).join("") : !inv.length?'<div class="empty">No radios yet. Scan one in with Asset Transfer above.</div>' : (q.length>=5?'':'<div class="empty">No radios match. Clear the search or pick another location.</div>');
+        : (canReport?'<button class="btn quiet sm" type="button" data-report="'+esc(r.sn)+'">Report bad</button>':''))+'</div>'; }).join("") : !inv.length?'<div class="empty">No radios yet. Scan one in with Asset Transfer above.</div>' : (q.length>=5?'':'<div class="empty">No radios match. Clear the search or pick another location.</div>');
 }
 function onMove(e){
   var sel=e.target.closest("select.move"); if(!sel) return;
