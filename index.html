@@ -1647,7 +1647,7 @@ function viewCons(){
     var ch=e.target.closest(".chip"); if(ch){ consFilter=ch.dataset.f; drawCons(); return; }
     var o=e.target.closest("[data-corder]"); if(!o) return;
     var x=data[cur].cons.filter(function(y){return String(y.row)===o.dataset.corder;})[0]; if(!x) return; var val=o.dataset.val==="1"; o.disabled=true; o.textContent="Saving…";
-    run("setConsOrdered",token,cur,x.rows,val).then(function(){ toast(val?"Order submitted for "+x.qty+" × "+x.item:x.item+" moved back to open"); return load(true); })
+    run("setConsOrdered",token,cur,x.rows.length===1?x.row:x.rows,val).then(function(){ toast(val?"Order submitted for "+x.qty+" × "+x.item:x.item+" moved back to open"); return load(true); })
       .catch(function(err){ if(isAuthErr(err)) return signedOut("Sign in again to continue."); toast(errText(err)); o.disabled=false; o.textContent=val?"Mark order submitted":"Undo"; });
   });
 }
