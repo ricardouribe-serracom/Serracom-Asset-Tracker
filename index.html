@@ -438,10 +438,14 @@ function build(r){
 }
 function buildMarket(m,t){
   var res={inv:null,tags:[],cons:[]};
-  if(t.cons&&t.cons.length>1){ var q=t.cons[0].map(H), ci=function(n){ return hidx(q,[n]); }, k2={ts:ci("TIMESTAMP"),site:ci("SITE ID"),inc:ci("INC #"),cat:ci("CATEGORY"),it:ci("CONSUMABLE"),pt:ci("PART NAME"),qty:ci("QTY"),rs:ci("FAILURE REASON"),sec:ci("SECTOR"),nt:ci("ALARM NOTES"),by:ci("EMAIL ADDRESS"),ph:ci("PHOTO"),ord:ci("ORDER SUBMITTED"),on:ci("ORDERED ON")};
+  if(t.cons&&t.cons.length>1){ var q=t.cons[0].map(H), ci=function(n){ return hidx(q,[n]); }, k2={ts:ci("TIMESTAMP"),site:ci("SITE ID"),inc:ci("INC #"),cat:ci("CATEGORY"),it:ci("CONSUMABLE"),pt:ci("PART NAME"),qty:ci("QTY"),rs:ci("FAILURE REASON"),sec:ci("SECTOR"),nt:ci("ALARM NOTES"),by:ci("EMAIL ADDRESS"),ph:ci("PHOTO"),ord:ci("ORDER SUBMITTED"),on:ci("ORDERED ON"),id:ci("ENTRY ID")};
     res.cons=t.cons.slice(1).map(function(x,i){ var d=toDate(x[k2.ts]), site=S(x[k2.site]), it=S(x[k2.it]); if(!d||!site||!it) return null;
       var o=x[k2.ord]; return {row:i+2,date:d,site:normSite(site,m),ticket:S(x[k2.inc]).toUpperCase(),cat:S(x[k2.cat]),item:it,part:S(x[k2.pt]),qty:parseInt(x[k2.qty],10)||1,reason:S(x[k2.rs]),sector:H(x[k2.sec]),notes:S(x[k2.nt]),
-        by:nameOf(x[k2.by]),photo:/^https:\/\//.test(S(x[k2.ph]))?S(x[k2.ph]):"",ordered:o===true||H(o)==="TRUE",orderedOn:k2.on>=0?toDate(x[k2.on]):null}; }).filter(Boolean).sort(function(a,b){return b.date-a.date;}); }
+        by:nameOf(x[k2.by]),photo:/^https:\/\//.test(S(x[k2.ph]))?S(x[k2.ph]):"",ordered:o===true||H(o)==="TRUE",orderedOn:k2.on>=0?toDate(x[k2.on]):null,entry:k2.id>=0?S(x[k2.id]):""}; }).filter(Boolean);
+    // one sheet row per unit; rows logged together (same ENTRY ID) show as one entry with a quantity
+    var byId={}, ent=[]; res.cons.forEach(function(x){ var key=x.entry?"e"+x.entry+(x.ordered?"1":"0"):"r"+x.row, e=byId[key];
+      if(e){ e.qty+=x.qty; e.rows.push(x.row); return; } x.rows=[x.row]; byId[key]=x; ent.push(x); });
+    res.cons=ent.sort(function(a,b){return b.date-a.date;}); }
   if(t.inv&&t.inv.length){
     var h=t.inv[0].map(H), c={st:hidx(h,["STATUS"]),md:hidx(h,["RADIO"]),nt:hidx(h,["NOTES"]),loc:hidx(h,["LOCATION"]),sn:hidx(h,["SERIAL NUMBER"]),scan:hidx(h,["SCANNED SN"]),as:hidx(h,["ASSET NUMBER"]),sas:hidx(h,["SCANNED ASSET"]),by:hidx(h,["LAST MOVED BY"]),at:hidx(h,["LAST MOVED"]),ds:hidx(h,["DATE OF SCAN"]),rma:hidx(h,["RMA #"]),sh:hidx(h,["SHIPPED"]),ph:hidx(h,["INSTALL PHOTO"])};
     res.inv=t.inv.slice(1).map(function(x,i){
@@ -1604,7 +1608,8 @@ var consFilter="open";
 function viewCons(){
   photos={};
   var cats={}; data.cons.forEach(function(c){ (cats[c.cat]=cats[c.cat]||[]).push(c); });
-  var opts=Object.keys(cats).map(function(k){ return '<optgroup label="'+esc(k)+'">'+cats[k].map(function(c){ return '<option value="'+esc(c.name)+'">'+esc(c.name)+'</option>'; }).join("")+'</optgroup>'; }).join("");
+  var catOrder=Object.keys(cats).sort(function(a,b){ var sa=/^SFP/i.test(a)?0:1, sb=/^SFP/i.test(b)?0:1; return sa-sb; });   // SFPs first
+  var opts=catOrder.map(function(k){ return '<optgroup label="'+esc(k)+'">'+cats[k].map(function(c){ return '<option value="'+esc(c.name)+'">'+esc(c.name)+'</option>'; }).join("")+'</optgroup>'; }).join("");
   app.innerHTML=liveLine()+'<section><div class="sec-h"><h2>Consumables used</h2><p>'+(viewMember()?'Adds it as you, for '+esc(viewMember().name):'Jumpers, fiber and SFPs. Nothing to scan')+'</p></div><form id="consForm" novalidate>'+
     '<div id="cErr" class="formerr" hidden></div>'+
     '<div class="f2">'+siteField("cSite")+
@@ -1642,7 +1647,7 @@ function viewCons(){
     var ch=e.target.closest(".chip"); if(ch){ consFilter=ch.dataset.f; drawCons(); return; }
     var o=e.target.closest("[data-corder]"); if(!o) return;
     var x=data[cur].cons.filter(function(y){return String(y.row)===o.dataset.corder;})[0]; if(!x) return; var val=o.dataset.val==="1"; o.disabled=true; o.textContent="Saving…";
-    run("setConsOrdered",token,cur,x.row,val).then(function(){ toast(val?"Order submitted for "+x.qty+" × "+x.item:x.item+" moved back to open"); return load(true); })
+    run("setConsOrdered",token,cur,x.rows,val).then(function(){ toast(val?"Order submitted for "+x.qty+" × "+x.item:x.item+" moved back to open"); return load(true); })
       .catch(function(err){ if(isAuthErr(err)) return signedOut("Sign in again to continue."); toast(errText(err)); o.disabled=false; o.textContent=val?"Mark order submitted":"Undo"; });
   });
 }

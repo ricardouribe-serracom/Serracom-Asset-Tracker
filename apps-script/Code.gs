@@ -26,7 +26,7 @@ var PHOTO_FOLDER = 'Serracom Inventory Tracker Photos';
 var INV_HEADERS = ['STATUS', 'RADIO', 'NOTES', 'LOCATION', 'SERIAL NUMBER', 'SCANNED SN', 'ASSET NUMBER', 'SCANNED ASSET', 'DATE OF SCAN', 'PRODUCT CODE', 'LAST MOVED BY', 'LAST MOVED'];
 var MOVE_HEADERS = ['Timestamp', 'Transfer Location', 'Serial Number', 'Serial Number Picture', 'Asset Number', 'Asset Number Picture', 'Notes', 'Site ID if Installed', 'Radio Name', 'RADIO', 'MOVED BY'];
 var SESSION_DAYS = 120;
-var APP_VERSION = '2026-11-05b';
+var APP_VERSION = '2026-11-05c';
 var SETTINGS_TAB = 'Settings';
 var SITES_TAB = 'Sites';
 var SITE_AREAS = { AU: 'Austin', CC: 'Corpus', SA: 'San Antonio', TK: 'Waco', WA: 'Waco', DA: 'Dallas' };
@@ -284,30 +284,39 @@ function submitConsumable(token, f) {
   try {
     var sh = ss.getSheetByName(c.cons);
     if (!sh) throw new Error('NO_TAB:' + c.cons);
-    var h = headers_(sh), row = blankRow_(h.length);
+    ensureCol_(sh, 'ENTRY ID');
+    var h = headers_(sh), row = blankRow_(h.length), now = new Date(), entry = Utilities.getUuid().slice(0, 8);
     var put = function (name, value) { var i = findCol_(h, [name]); if (i >= 0) row[i] = value; };
-    put('TIMESTAMP', new Date()); put('SITE ID', f.site); put('INC #', f.ticket); put('CATEGORY', f.cat || '');
-    put('CONSUMABLE', f.item); put('PART NAME', f.part || ''); put('QTY', qty); put('FAILURE REASON', f.reason);
+    put('TIMESTAMP', now); put('SITE ID', f.site); put('INC #', f.ticket); put('CATEGORY', f.cat || '');
+    put('CONSUMABLE', f.item); put('PART NAME', f.part || ''); put('QTY', 1); put('FAILURE REASON', f.reason);
     put('SECTOR', String(f.sector).toUpperCase()); put('ALARM NOTES', f.notes); put('EMAIL ADDRESS', user.email); put('PHOTO', photo);
-    put('ORDER SUBMITTED', false);
+    put('ORDER SUBMITTED', false); put('ENTRY ID', entry);
+    // one row per unit used: 3 jumpers = 3 rows, tied together by ENTRY ID
+    var rows = []; for (var q = 0; q < qty; q++) rows.push(row.slice());
     var r = nextRow_(sh, 1);
-    sh.getRange(r, 1, 1, row.length).setValues([row]);
+    sh.getRange(r, 1, qty, row.length).setValues(rows);
     addSite_(ss, f.site, f.market, user);
     return JSON.stringify({ ok: true, row: r });
   } finally {
     lock.releaseLock();
   }
 }
-/** Manager marks a consumable's CHAT order submitted (or undoes it). */
-function setConsOrdered(token, market, row, value) {
+/** Manager marks a consumable's CHAT order submitted (or undoes it), for every row of that entry. */
+function setConsOrdered(token, market, rows, value) {
   var ss = book_(), user = who_(ss, token), c = market_(market);
   requireManager_(user);
   var sh = ss.getSheetByName(c.cons);
-  if (!sh || row < 2 || row > sh.getLastRow()) throw new Error('NOT_FOUND');
-  sh.getRange(row, ensureCol_(sh, 'ORDER SUBMITTED')).setValue(!!value);
-  sh.getRange(row, ensureCol_(sh, 'ORDER MARKED BY')).setValue(value ? user.email + ' · ' + stamp_(ss) : '');
-  sh.getRange(row, ensureCol_(sh, 'ORDERED ON')).setValue(value ? new Date() : '');
-  return JSON.stringify({ ok: true, row: row });
+  rows = [].concat(rows);
+  if (!sh || !rows.length) throw new Error('NOT_FOUND');
+  var last = sh.getLastRow(), oc = ensureCol_(sh, 'ORDER SUBMITTED'), mc = ensureCol_(sh, 'ORDER MARKED BY'), dc = ensureCol_(sh, 'ORDERED ON');
+  rows.forEach(function (row) {
+    row = Number(row);
+    if (row < 2 || row > last) throw new Error('NOT_FOUND');
+    sh.getRange(row, oc).setValue(!!value);
+    sh.getRange(row, mc).setValue(value ? user.email + ' · ' + stamp_(ss) : '');
+    sh.getRange(row, dc).setValue(value ? new Date() : '');
+  });
+  return JSON.stringify({ ok: true, rows: rows });
 }
 
 function pullToInventory_(ss, user, c, d) {
@@ -780,8 +789,9 @@ var MODELS_REV = '4';
 /** Consumables: parts ordered on CHAT with no serial (jumpers, fiber, SFPs). Editable on the Consumables List tab. */
 var CONS_LIST_TAB = 'Consumables List';
 var CONS_LIST_HEADERS = ['NAME', 'CATEGORY', 'PART NAME', 'PRODUCT CODE', 'TECHNOLOGIES', 'AU RESTING STOCK', 'HN RESTING STOCK'];
-var CONS_HEADERS = ['TIMESTAMP', 'SITE ID', 'INC #', 'CATEGORY', 'CONSUMABLE', 'PART NAME', 'QTY', 'FAILURE REASON', 'SECTOR', 'ALARM NOTES', 'EMAIL ADDRESS', 'PHOTO', 'ORDER SUBMITTED', 'ORDER MARKED BY', 'ORDERED ON'];
+var CONS_HEADERS = ['TIMESTAMP', 'SITE ID', 'INC #', 'CATEGORY', 'CONSUMABLE', 'PART NAME', 'QTY', 'FAILURE REASON', 'SECTOR', 'ALARM NOTES', 'EMAIL ADDRESS', 'PHOTO', 'ORDER SUBMITTED', 'ORDER MARKED BY', 'ORDERED ON', 'ENTRY ID'];
 var CONS_LIST = [
+  ['1310 SFP', 'SFPs', '33592 SM 1.4km SFP 1310nm CPRI 9.8G', 'L700, L1900'],
   ["8' 4.3-10 to 4.3-10 RF JUMPER", 'RF Jumpers', '34431 BOOTED JMPR 8ft 4.3-10-4.3-10 REP 33287', ''],
   ["8' DM to 4.3-10 RF JUMPER", 'RF Jumpers', "33292 JUMPER 8' FOAM 4.3-10 TO DM", ''],
   ["15' SQUID FIBER AHLOA/AHFIG", 'Fiber Jumpers', '34592 5M Fiber AHLOA/AHFIG To 6/24 ODC-R2TC', ''],
@@ -799,8 +809,7 @@ var CONS_LIST = [
   ["30' AHFII HYBRID 2.0", 'Fiber Jumpers', "34580 30' HCS 2.0 TOP JMPR 3FP AHFII AHLOB", 'L1900, L2100'],
   ["35' 6P BOTTOM FIBER", 'Fiber Jumpers', "33600 35' BOTTOM JMPR W/ 6 FIBER PR AIRSCALE", ''],
   ["15' AVHA HYBRID 2.0", 'Fiber Jumpers', "39750 15' HCS 2.0 JMPR 6AWG 4FP AVHA AOPC-APPG", 'L2500, N2500'],
-  ["30' AVHA HYBRID 2.0", 'Fiber Jumpers', "39751 30' HCS 2.0 JMPR 6AWG 4FP AVHA AOPC-APPG", 'L2500, N2500'],
-  ['1310 SFP', 'SFPs', '33592 SM 1.4km SFP 1310nm CPRI 9.8G', 'L700, L1900']];
+  ["30' AVHA HYBRID 2.0", 'Fiber Jumpers', "39751 30' HCS 2.0 JMPR 6AWG 4FP AVHA AOPC-APPG", 'L2500, N2500']];
 /** CHAT order form: the T-Mobile part (SAP # + name) and technologies for each model. Editable on the CHAT Parts tab. */
 var CHAT_PARTS_TAB = 'CHAT Parts', CHAT_SETTINGS_TAB = 'CHAT Settings';
 var CHAT_PARTS = [
