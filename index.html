@@ -1495,7 +1495,7 @@ function startLive(kind,cb){
 /* ---------- log a swap ---------- */
 var photos={};
 function logFormHtml(){
-  return '<section><div class="sec-h"><h2>Log a swap · '+esc(MARKETS[cur].name)+'</h2><p>'+(viewMember()?'Adds the red tag as you, for '+esc(viewMember().name):'Adds the red tag to the sheet as '+esc(user?user.name:"you"))+'</p></div><form id="logForm" novalidate>'+
+  return '<section><div class="sec-h"><h2>Bad radio red tag</h2><p>'+(viewMember()?'Adds the red tag as you, for '+esc(viewMember().name):'Adds the red tag to the sheet as '+esc(user?user.name:"you"))+'</p></div><form id="logForm" novalidate>'+
     '<div id="logErr" class="formerr" hidden></div>'+
     '<div class="f2">'+
       siteField("lSite")+
@@ -1503,8 +1503,8 @@ function logFormHtml(){
       scanField("lBad","Bad Radio SN","serial",false)+
     '</div><div class="f2">'+
       '<label>Radio<select id="lModel"><option value="">Choose radio</option>'+data.models.map(function(m){return '<option>'+esc(m)+'</option>';}).join("")+'</select><span class="hint"></span></label>'+
-      '<label>Failure reason<select id="lReason"><option value="">Choose reason</option>'+REASONS.map(function(r){return '<option>'+esc(r)+'</option>';}).join("")+'</select><span class="hint"></span></label>'+
       scanField("lAsset","T-Mobile asset tag","asset",true)+
+      '<label>Failure reason<select id="lReason"><option value="">Choose reason</option>'+REASONS.map(function(r){return '<option>'+esc(r)+'</option>';}).join("")+'</select><span class="hint"></span></label>'+
     '</div>'+
     '<label class="check"><input id="lBox" type="checkbox"> Bad out of the box (new radio failed on install)</label><p class="note">The pulled radio moves to '+esc(myTruck()?title(myTruck()):title(MARKETS[cur].store))+', marked bad, ready to ship to Tellworks.</p>'+
     '<label>Alarm notes (required)<textarea id="lNotes" placeholder="TX out of order on ports 3 & 4, water intrusion, VSWR…"></textarea></label>'+
