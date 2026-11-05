@@ -1,7 +1,8 @@
 Attribute VB_Name = "ChatPullRedTags"
 ' Serracom CHAT Request Form helper.
 ' Reads the CSV from the app's "Export CHAT" button and fills the Order form and Justification tabs.
-' Only typing cells are filled. Formula columns C (Asset Returned Required) and F (Request date) are never touched.
+' Only typing cells are filled, into the existing rows, so the form keeps its formats and formulas.
+' Formula columns C (Asset Returned Required) and F (Request date), and any formula in D, are never touched.
 ' A serial that's already on the Order form is skipped, so running it twice doesn't add lines twice.
 Option Explicit
 
@@ -40,7 +41,9 @@ Public Sub PullRedTags()
             r = NextOrderRow(wsO)
             wsO.Cells(r, "A").Value = "ORDER "
             wsO.Cells(r, "B").Value = Col(v, hdr, "PART NAME")
-            If Not wsO.Cells(r, "D").HasFormula Then wsO.Cells(r, "D").Value = "YES"
+            wsO.Calculate
+            ' D follows column C (the form's formula): radios that need the asset back get YES, the rest N/A
+            If Not wsO.Cells(r, "D").HasFormula Then wsO.Cells(r, "D").Value = IIf(UCase$(CStr(wsO.Cells(r, "C").Value)) = "NO", "N/A", "YES")
             wsO.Cells(r, "E").Value = sn
             wsO.Cells(r, "G").Value = Col(v, hdr, "GC")
             ColorGC wsO.Cells(r, "G")
@@ -54,6 +57,7 @@ Public Sub PullRedTags()
 
             ' ---- Justification ----
             rj = NextRow(wsJ, 3, "B")
+            If rj > 3 Then MatchRowAbove wsJ, rj, "A", "J"
             wsJ.Cells(rj, "A").Value = "New request"
             wsJ.Cells(rj, "B").Value = Col(v, hdr, "PART NAME")
             wsJ.Cells(rj, "C").Value = Col(v, hdr, "FAIL REASON")
@@ -119,6 +123,15 @@ Private Function NextRow(ws As Worksheet, firstRow As Long, col As String) As Lo
     Loop
     NextRow = r
 End Function
+
+'' Gives a new Justification row the same borders, fonts and dropdowns as the row above it.
+Private Sub MatchRowAbove(ws As Worksheet, r As Long, firstCol As String, lastCol As String)
+    If Trim$(CStr(ws.Cells(r - 1, "B").Value)) = "" Then Exit Sub
+    ws.Range(firstCol & (r - 1) & ":" & lastCol & (r - 1)).Copy
+    ws.Range(firstCol & r & ":" & lastCol & r).PasteSpecial Paste:=xlPasteFormats
+    ws.Range(firstCol & r & ":" & lastCol & r).PasteSpecial Paste:=xlPasteValidation
+    Application.CutCopyMode = False
+End Sub
 
 ' Same look the Order form gives the GC column when you type in it.
 Private Sub ColorGC(cell As Range)
