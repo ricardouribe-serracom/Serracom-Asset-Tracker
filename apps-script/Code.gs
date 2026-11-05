@@ -26,7 +26,7 @@ var PHOTO_FOLDER = 'Serracom Inventory Tracker Photos';
 var INV_HEADERS = ['STATUS', 'RADIO', 'NOTES', 'LOCATION', 'SERIAL NUMBER', 'SCANNED SN', 'ASSET NUMBER', 'SCANNED ASSET', 'DATE OF SCAN', 'PRODUCT CODE', 'LAST MOVED BY', 'LAST MOVED'];
 var MOVE_HEADERS = ['Timestamp', 'Transfer Location', 'Serial Number', 'Serial Number Picture', 'Asset Number', 'Asset Number Picture', 'Notes', 'Site ID if Installed', 'Radio Name', 'RADIO', 'MOVED BY'];
 var SESSION_DAYS = 120;
-var APP_VERSION = '2026-11-04c';
+var APP_VERSION = '2026-11-05';
 var SETTINGS_TAB = 'Settings';
 var SITES_TAB = 'Sites';
 var SITE_AREAS = { AU: 'Austin', CC: 'Corpus', SA: 'San Antonio', TK: 'Waco', WA: 'Waco', DA: 'Dallas' };
@@ -188,7 +188,7 @@ function getData(token, sitesKey) {
   var ss = book_(), user = who_(ss, token), sk = sitesKey_(ss);
   addNewModels_(ss);
   var out = { user: user, team: readTeam_(ss).map(function (m) { return { email: m.email, name: m.name, truck: m.truck, market: m.market, role: m.role }; }),
-    lookup: readTab_(ss, 'Lookup'), settings: readTab_(ss, SETTINGS_TAB), sites: sitesKey && sitesKey === sk ? null : readTab_(ss, SITES_TAB), sitesKey: sk, markets: {}, locations: {}, models: [], tz: ss.getSpreadsheetTimeZone(), book: ss.getName() };
+    lookup: readTab_(ss, 'Lookup'), chatParts: readTab_(ss, CHAT_PARTS_TAB), chatSettings: readTab_(ss, CHAT_SETTINGS_TAB), settings: readTab_(ss, SETTINGS_TAB), sites: sitesKey && sitesKey === sk ? null : readTab_(ss, SITES_TAB), sitesKey: sk, markets: {}, locations: {}, models: [], tz: ss.getSpreadsheetTimeZone(), book: ss.getName() };
   Object.keys(MARKETS).forEach(function (m) {
     var c = MARKETS[m];
     out.markets[m] = { tags: readTab_(ss, c.tags), bad: readTab_(ss, c.bad), inv: readTab_(ss, c.inv) };
@@ -240,6 +240,7 @@ function submitRedTag(token, f) {
   try {
     var sh = ss.getSheetByName(c.tags);
     if (!sh) throw new Error('NO_TAB:' + c.tags);
+    if (f.sector) ensureCol_(sh, 'SECTOR');
     var h = headers_(sh), row = blankRow_(h.length);
     var put = function (names, value) { var i = findCol_(h, names); if (i >= 0) row[i] = value; };
     var notesCol = h.findIndex(function (x) { return x.indexOf('ALARM NOTES') === 0; });
@@ -250,6 +251,7 @@ function submitRedTag(token, f) {
     put(['SERIAL NUMBER OR ASSET IF NO SN', 'SERIAL NUMBER'], f.badSn);
     put(['FAILURE REASON'], notesCol < 0 && f.notes ? f.reason + ' · ' + f.notes : f.reason);
     put(['ASSET NUMBER'], f.asset || '');
+    put(['SECTOR'], String(f.sector || '').toUpperCase());
     if (f.market === 'HN') put(['STATUS'], 'Bad');
     put(['SERIAL NUMBER PICTURE OR ASSET IF NO SN', 'SERIAL NUMBER PICTURE'], photoBad);
     put(['EMAIL ADDRESS'], user.email);
@@ -731,7 +733,23 @@ function applyResting_(ss) {
  * Adds models and product codes the sheet doesn't have yet (Settings, Lookup, model dropdowns).
  * Runs once by itself after a release that changes MODELS_REV. Never changes numbers already on the Settings tab.
  */
-var MODELS_REV = '2';
+var MODELS_REV = '3';
+/** CHAT order form: the T-Mobile part (SAP # + name) and technologies for each model. Editable on the CHAT Parts tab. */
+var CHAT_PARTS_TAB = 'CHAT Parts', CHAT_SETTINGS_TAB = 'CHAT Settings';
+var CHAT_PARTS = [
+  ['AHLOA', '33567 USED AHLOA AirScale Dual RRH 600/700 4T4', 474331, 'L700, N600'],
+  ['AHFIG', '34228 USED AHFIG AirScale2 DualRRH 4T4R B25/66', 475125, 'L1900, L2100'],
+  ['AHFIB', '33591 Used AHFIB AirScale2 DualRRH 4T4R B25/66', 474216, 'L1900, L2100'],
+  ['AAFIA', '34025 USED Airscale 16T16R B25/66 160W AAFIA', 474486, 'L1900, L2100'],
+  ['1310 SFP', '33592 SM 1.4km SFP 1310nm CPRI 9.8G', '', 'L700, L1900'],
+  ['AHFII', '34612 USED AHFII AirScale2 Dual RRH4T4R B25/66', 475656, 'L1900, L2100'],
+  ['AEHC', '34229 USED Airscale MAA B41 AEHC 64T64R 320W', 475124, 'L2500, N2500'],
+  ['AOSD', '34190 AOSD SFP28 10KM SM I-TEMP RS for AEHC', 474902, 'L2500, N2500'],
+  ['FXFB', '30186 USED GSM/U1900 FXFB RF Single Unit', 472569, 'U1900, L1900'],
+  ['FXFC', '30185 USED FXFC Flexi RF Module 1900 Triple 90', 472679, 'U1900, L1900'],
+  ['FRIG', '33098 Used FRIG', 472704, 'L2100'],
+  ['AHLOB', '34644 USED AHLOB Airscale RRH 4T4R 600-700', 475910, 'L700, N600'],
+  ['AVHA', '39671 USED AVHA AIRSCALE MAA B41 64T64R', 476268, 'L2500, N2500']];
 function addNewModels_(ss) {
   var props = PropertiesService.getScriptProperties();
   if (props.getProperty('MODELS_REV') === MODELS_REV) return;
@@ -756,6 +774,17 @@ function addNewModels_(ss) {
       RADIO_MODELS.forEach(function (x) { if (all.indexOf(x) < 0) all.push(x); });
       if (all.length !== cur.length || !cur.length) sh.getRange('B2:B1000').setDataValidation(list_(all));
     });
+    var cp = ss.getSheetByName(CHAT_PARTS_TAB) || ss.insertSheet(CHAT_PARTS_TAB);
+    if (cp.getLastRow() < 1) cp.getRange(1, 1, 1, 4).setValues([['MODEL', 'PART NAME', 'PRODUCT CODE', 'TECHNOLOGIES']]).setFontWeight('bold');
+    var haveCp = cp.getLastRow() > 1 ? cp.getRange(2, 1, cp.getLastRow() - 1, 1).getValues().map(function (r) { return String(r[0]).trim().toUpperCase(); }) : [];
+    CHAT_PARTS.forEach(function (row) { if (haveCp.indexOf(row[0]) < 0) cp.appendRow(row); });
+    var cs = ss.getSheetByName(CHAT_SETTINGS_TAB);
+    if (!cs) {
+      cs = ss.insertSheet(CHAT_SETTINGS_TAB);
+      cs.getRange(1, 1, 4, 3).setValues([['FIELD', 'AU', 'HN'], ['GC', 'AUSTIN      SERRACOM', 'HOUSTON      SERRACOM'], ['PICKUP LOCATION', 'AUSTIN', 'HOUSTON'], ['PHONE', '', '']]);
+      cs.getRange(1, 1, 1, 3).setFontWeight('bold');
+      cs.getRange('A6').setValue('Type the phone number for each market in row 4. It goes on every CHAT order for that market.');
+    }
     props.setProperty('MODELS_REV', MODELS_REV);
   } finally {
     lock.releaseLock();

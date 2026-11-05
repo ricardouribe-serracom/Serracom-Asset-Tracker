@@ -305,7 +305,8 @@ body{padding-top:env(safe-area-inset-top,0px)}
 
 <script>
 (function(){
-var REASONS=["Will Not Power Up","Fault/OSS Alarms will not clear","RF Intermittent Performance/RTWP/VSWR","Cannot Detect/Access","Heat Related (Fan Failure)","Unstable/Resets","Damage Port/Connector/Interface","Physically Defective (non-connectors and interface)","Cannot Load Software","Cannot Upgrade Due to Hardware Version Level","Failed Light Test/Will Not Pass Light (Hybrid/Fiber Jumpers)","Water in unit"];
+var REASONS=["Will Not Power Up","Fault/OSS Alarms will not clear","RF Intermittent Performance/RTWP/VSWR","Cannot Detect/Access","Heat Related (Fan Failure)","Unstable/Resets","Damage Port/Connector/Interface","Physically Defective (non-connectors and interface)","Cannot Load Software","Cannot Upgrade Due to Hardware Version Level","Failed Light Test/Will Not Pass Light (Hybrid/Fiber Jumpers)"];
+var SECTORS=["ALPHA","BETA","GAMMA","DELTA","EPSILON","ZETA"];
 var MARKETS={AU:{name:"AU",store:"AU WAREHOUSE",sitePh:"TK02047"},HN:{name:"HN",store:"HN WAREHOUSE",sitePh:"A3H0170A"}};
 var NOT_SPARE=["SITE","TELLWORKS"];
 var STOCK_ORDER=["AHLOA","AEHC","AHFIG","AHLOB","AHFII","AAFIA","FXFC","FFVV","HBXX"];
@@ -414,7 +415,11 @@ function myTruck(){ var v=viewMember(); return v? H(v.truck) : user? H(user.truc
 function build(r){
   LOOKUP={}; (r.lookup||[]).slice(1).forEach(function(x){ var c=S(x[0]).replace(/\.0+$/,""), m=S(x[1]); if(c&&m) LOOKUP[c]=m; });
   var mods=[]; (r.models||[]).concat(DEFAULT_MODELS).forEach(function(m){ m=H(m); if(m&&mods.indexOf(m)<0) mods.push(m); });
-  var out={models:mods,locations:r.locations||{},targets:null};
+  var out={models:mods,locations:r.locations||{},targets:null,chat:{parts:{},set:{AU:{},HN:{}}}};
+  if(r.chatParts&&r.chatParts.length>1){ var ch=r.chatParts[0].map(H), cm=hidx(ch,["MODEL"]), cn=hidx(ch,["PART NAME"]), ct=hidx(ch,["TECHNOLOGIES"]);
+    r.chatParts.slice(1).forEach(function(x){ var md=H(x[cm]); if(md) out.chat.parts[md]={part:S(x[cn]),tech:ct>=0?S(x[ct]):""}; }); }
+  if(r.chatSettings&&r.chatSettings.length>1){ var sh3=r.chatSettings[0].map(H), ai=hidx(sh3,["AU"]), ni=hidx(sh3,["HN"]);
+    r.chatSettings.slice(1).forEach(function(x){ var key=H(x[0]); if(!key) return; out.chat.set.AU[key]=S(x[ai]); out.chat.set.HN[key]=S(x[ni]); }); }
   if(r.settings&&r.settings.length>1){ var sh=r.settings[0].map(H), mi=hidx(sh,["MODEL"]), am=hidx(sh,["AU RESTING STOCK","AU MIN SPARES"]), hm=hidx(sh,["HN RESTING STOCK","HN MIN SPARES"]);
     out.targets={AU:{total:0,models:{}},HN:{total:0,models:{}}};
     r.settings.slice(1).forEach(function(x){ var md=H(x[mi]); if(!md) return; [["AU",am],["HN",hm]].forEach(function(p){ var n=parseInt(x[p[1]],10); if(isNaN(n)) return; if(/^ALL MODELS/.test(md)) out.targets[p[0]].total=n; else out.targets[p[0]].models[md]=n; }); }); }
@@ -442,7 +447,7 @@ function buildMarket(m,t){
     var g=t.tags[0].map(H);
     var k={ts:hidx(g,["TIMESTAMP"]),md:hidx(g,["RADIO"]),site:hidx(g,["SITE ID"]),inc:hidx(g,["INC #","INC # / TT NUMBER"]),bad:hidx(g,["SERIAL NUMBER OR ASSET IF NO SN","SERIAL NUMBER"]),rs:hidx(g,["FAILURE REASON"]),st:hidx(g,["STATUS"]),
       p1:hidx(g,["SERIAL NUMBER PICTURE OR ASSET IF NO SN","SERIAL NUMBER PICTURE"]),p3:hidx(g,["ASSET NUMBER PICTURE"]),by:hidx(g,["EMAIL ADDRESS"]),nw:hidx(g,["NEW RADIO SN INSTALLED"]),p2:hidx(g,["NEW RADIO SN INSTALLED PICTURE"]),
-      nt:g.findIndex(function(x){return x.indexOf("ALARM NOTES")===0;}), as:hidx(g,["ASSET NUMBER"])};
+      nt:g.findIndex(function(x){return x.indexOf("ALARM NOTES")===0;}), as:hidx(g,["ASSET NUMBER"]), sec:hidx(g,["SECTOR"])};
     var bad=t.bad||[], bh=(bad[0]||[]).map(H), bsn=hidx(bh,["SERIAL NUMBER"]), box=hidx(bh,["CHAT ORDER SUBMITTED?"]), bon=hidx(bh,["ORDERED ON"]), brc=hidx(bh,["REPLACEMENT RECEIVED"]), brs=hidx(bh,["RECEIVED SN"]);
     var used={};
     res.tags=t.tags.slice(1).map(function(x,i){
@@ -456,7 +461,7 @@ function buildMarket(m,t){
       var inc=S(x[k.inc]).toUpperCase().replace(/_+$/,"");
       var photos=[[x[k.p1],"Pulled radio"],[x[k.p2],"New radio"],[x[k.p3],"Asset tag"]].filter(function(p){return /^https:\/\//.test(S(p[0]));}).map(function(p){return {url:S(p[0]),label:p[1]};});
       return {row:row,date:d,siteRaw:site,site:normSite(site,m),model:H(x[k.md]),ticket:/^\d+$/.test(inc)?"INC"+inc:inc,badSn:b,reason:S(x[k.rs]),notes:k.nt>=0?S(x[k.nt]):"",
-        by:nameOf(x[k.by]),newSn:SN(x[k.nw]),asset:k.as>=0?SN(x[k.as]):"",photos:photos,ordered:ordered,orderedOn:orderedOn,received:received,receivedSn:receivedSn};
+        by:nameOf(x[k.by]),newSn:SN(x[k.nw]),asset:k.as>=0?SN(x[k.as]):"",sector:k.sec>=0?H(x[k.sec]):"",photos:photos,ordered:ordered,orderedOn:orderedOn,received:received,receivedSn:receivedSn};
     }).filter(Boolean).sort(function(a,b){return b.date-a.date;});
   }
   return res;
@@ -969,7 +974,27 @@ function drawTags(){
   sec.innerHTML='<div class="sec-h"><h2>'+esc(MARKETS[cur].name)+' red tags</h2><p>'+plural(tg.length,'tag')+'</p></div>'+
     '<div class="chips" id="tagChips"><button type="button" class="chip" data-f="open" aria-pressed="'+(tagFilter==="open")+'">Needs order ('+n.open+')</button><button type="button" class="chip" data-f="ordered" aria-pressed="'+(tagFilter==="ordered")+'">Order submitted ('+n.ordered+')</button><button type="button" class="chip" data-f="all" aria-pressed="'+(tagFilter==="all")+'">All</button></div>'+
     '<div class="tags" id="tagList">'+(list.length? list.map(tagCard).join("") : '<div class="empty">'+(tg.length?'Nothing here right now.':'No red tags yet. Log the first one above.')+'</div>')+'</div>'+
-    (isMgr?'':'<p class="note">Managers mark orders submitted.</p>');
+    (isMgr?(n.open?'<div class="t3"><button class="btn sm" type="button" id="chatExport">Export CHAT ('+n.open+')</button><span class="hint">Open orders as a file for the CHAT Request Form macro</span></div>':''):'<p class="note">Managers mark orders submitted.</p>');
+  var ce=document.getElementById("chatExport"); if(ce) ce.onclick=exportChat;
+}
+/** Open red tags as a CSV that the "Pull red tags" macro in the CHAT Request Form reads. */
+function exportChat(){
+  var set=data.chat.set[cur]||{}, parts=data.chat.parts, open=data[cur].tags.filter(function(t){ return tagState(t)==="open"; }).slice().reverse();
+  var clean=function(v){ return S(v).replace(/[\r\n]+/g," ").replace(/\u00b7/g,"-").replace(/[^\x20-\x7E]/g,""); };
+  var q=function(v){ v=clean(v); return /[",]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v; };
+  var head=["SITE ID","INC","MODEL","PART NAME","SERIAL","ASSET TAG","FAIL REASON","SECTOR","TECHNOLOGIES","ALARM NOTES","GC","PICKUP","PHONE","FREQUENCY","DATE"];
+  var noPart=[], noSec=[];
+  var rows=open.map(function(t){ var p=parts[t.model]||{}; if(!p.part) noPart.push(t.model||"?"); if(!t.sector) noSec.push(t.site);
+    var notes=t.notes.replace(/\s*\u00b7\s*Typed by hand:.*$/,"").replace(/\s*\u00b7\s*Logged by .*$/,"");
+    return [t.site,t.ticket,t.model,p.part||"",t.badSn,t.asset==="NA"?"":t.asset,t.reason,t.sector,p.tech||"",notes,set["GC"]||"",set["PICKUP LOCATION"]||"",set["PHONE"]||"","Continuous",fmtDate(t.date)].map(q).join(","); });
+  var csv=head.join(",")+"\r\n"+rows.join("\r\n")+"\r\n";
+  var a=document.createElement("a"), d=new Date(), stamp=d.getFullYear()+"-"+("0"+(d.getMonth()+1)).slice(-2)+"-"+("0"+d.getDate()).slice(-2);
+  a.href=URL.createObjectURL(new Blob([csv],{type:"text/csv"})); a.download="CHAT_"+cur+"_"+stamp+".csv"; document.body.appendChild(a); a.click();
+  setTimeout(function(){ URL.revokeObjectURL(a.href); a.remove(); },2000);
+  var warn=[]; if(noPart.length) warn.push("no CHAT part for "+noPart.filter(function(x,i,a){return a.indexOf(x)===i;}).join(", "));
+  if(noSec.length) warn.push("no sector on "+noSec.length+" older tag"+(noSec.length>1?"s":""));
+  if(!set["PHONE"]) warn.push("no phone on the CHAT Settings tab");
+  toast(plural(rows.length,"order")+" exported"+(warn.length?". Check: "+warn.join("; "):""));
 }
 function tagCard(t){
   var ph=t.photos.map(function(p){return '<a href="'+esc(p.url)+'" target="_blank" rel="noopener">'+esc(p.label)+' photo</a>';}).join("");
@@ -980,7 +1005,7 @@ function tagCard(t){
   var inst=(data[cur].inv||[]).filter(function(r){ return r.loc==="SITE"&&r.site===t.site; });
   return '<article class="tag'+(s==="ordered"?" done":"")+'"><div class="t1"><span class="site">'+esc(t.site)+'</span>'+(t.model?'<span class="model">'+esc(t.model)+'</span>':"")+'<span class="date">'+fmtDate(t.date)+(t.by?" · "+esc(t.by):"")+'</span></div>'+
     '<dl><dt>Pulled</dt><dd class="mono">'+esc(t.badSn)+'</dd>'+(inst.length?'<dt>At site now</dt><dd class="mono">'+inst.map(function(r){return esc(r.sn);}).join(", ")+'</dd>':'')+(t.asset&&t.asset!=="NA"?'<dt>Asset</dt><dd class="mono">'+esc(t.asset)+'</dd>':'')+
-    '<dt>Reason</dt><dd>'+esc(t.reason||"Not given")+(t.notes&&t.notes.toLowerCase()!==t.reason.toLowerCase()?" · "+esc(t.notes):"")+'</dd><dt>Ticket</dt><dd class="mono">'+esc(t.ticket||"None")+'</dd></dl>'+
+    (t.sector?'<dt>Sector</dt><dd>'+esc(title(t.sector))+'</dd>':'')+'<dt>Reason</dt><dd>'+esc(t.reason||"Not given")+(t.notes&&t.notes.toLowerCase()!==t.reason.toLowerCase()?" · "+esc(t.notes):"")+'</dd><dt>Ticket</dt><dd class="mono">'+esc(t.ticket||"None")+'</dd></dl>'+
     '<div class="t3">'+status+ph+'</div></article>';
 }
 
@@ -1505,6 +1530,7 @@ function logFormHtml(){
       '<label>Radio<select id="lModel"><option value="">Choose radio</option>'+data.models.map(function(m){return '<option>'+esc(m)+'</option>';}).join("")+'</select><span class="hint"></span></label>'+
       scanField("lAsset","T-Mobile asset tag","asset",true)+
       '<label>Failure reason<select id="lReason"><option value="">Choose reason</option>'+REASONS.map(function(r){return '<option>'+esc(r)+'</option>';}).join("")+'</select><span class="hint"></span></label>'+
+      '<label>Sector<select id="lSector"><option value="">Choose sector</option>'+SECTORS.map(function(x){return '<option value="'+x+'">'+title(x)+'</option>';}).join("")+'</select><span class="hint"></span></label>'+
     '</div>'+
     '<label class="check"><input id="lBox" type="checkbox"> Bad out of the box (new radio failed on install)</label><p class="note">The pulled radio moves to '+esc(myTruck()?title(myTruck()):title(MARKETS[cur].store))+', marked bad, ready to ship to Tellworks.</p>'+
     '<label>Alarm notes (required)<textarea id="lNotes" placeholder="TX out of order on ports 3 & 4, water intrusion, VSWR…"></textarea></label>'+
@@ -1527,7 +1553,7 @@ function wireLogForm(){
     var rs=resolveSite($("lSite").value), site=rs.site, tk=S($("lTicket").value).toUpperCase(), ticket=/^\d+$/.test(tk)?"INC"+tk:tk, model=$("lModel").value;
     var bf=fieldVal("lBad","bad radio serial"), af=fieldVal("lAsset","asset tag");
     var reason=$("lReason").value, box=$("lBox").checked, badSn=bf.value, notes=S($("lNotes").value), asset=af.value;
-    var miss=[]; if(!site) miss.push("site ID"); if(!ticket) miss.push("ticket number"); if(!model) miss.push("radio"); if(!badSn) miss.push("bad radio serial"); if(!reason) miss.push("failure reason"); if(!S($("lNotes").value)) miss.push("alarm notes");
+    var miss=[]; if(!site) miss.push("site ID"); if(!ticket) miss.push("ticket number"); if(!model) miss.push("radio"); if(!badSn) miss.push("bad radio serial"); if(!reason) miss.push("failure reason"); if(!$("lSector").value) miss.push("sector"); if(!S($("lNotes").value)) miss.push("alarm notes");
     if(rs.error) return show(rs.error);
     if(miss.length) return show("Add "+miss.join(", ")+".");
     var ferr=bf.error||af.error; if(ferr) return show(ferr);
@@ -1536,7 +1562,7 @@ function wireLogForm(){
     var typed=[]; if(bf.typed) typed.push("pulled serial"); if(af.typed&&asset) typed.push("asset tag");
     if(typed.length) notes=(notes?notes+" · ":"")+"Typed by hand: "+typed.join(", ");
     var btn=$("logBtn"); btn.disabled=true; btn.textContent="Saving…"; err.hidden=true;
-    var f={as:asWho(),market:cur,site:site,ticket:ticket,model:model,badSn:badSn,reason:reason,notes:notes,asset:asset,box:box,
+    var f={as:asWho(),market:cur,site:site,ticket:ticket,model:model,badSn:badSn,reason:reason,notes:notes,asset:asset,box:box,sector:$("lSector").value,
       photoBad:photos.ph1?{data:photos.ph1,mime:"image/jpeg"}:null};
     save("submitRedTag",[token,f],"Red tag "+site).then(function(r){ tagFilter="open"; return load(true).then(function(){ render();
         savedMsg(r,"Red tag created for "+site+(r&&r.inv?". "+badSn+" is now with "+title(r.inv.to)+", marked bad.":""));
