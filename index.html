@@ -610,9 +610,9 @@ function viewDashboard(){
     (isMgr?'<div class="stat'+(open?" hot":"")+'"><span class="v">'+open+'</span><span class="l">Orders not submitted</span></div>':'')+
     '<div class="stat"><span class="v">'+(spares==null?"–":spares)+'</span><span class="l">Good spares on hand</span></div>'+
     '<div class="stat"><span class="v">'+thisMonth+'</span><span class="l">Red tags this month</span></div></div></section>'+
+  table+
   '<section><div class="sec-h"><h2>Needs attention</h2><p>Checked against inventory and red tags</p></div><div class="flags">'+
     (fl.length? fl.map(function(f){return '<div class="flag'+(f.crit?" crit":"")+'"><i></i><div><strong>'+esc(f.title)+'</strong><span>'+esc(f.detail)+'</span></div></div>';}).join("") : '<div class="allclear">Nothing needs attention right now.</div>')+'</div></section>'+
-  table+
   '<section><div class="sec-h"><h2>Why radios failed</h2><p>Top reasons</p></div>'+barList(rs)+'</section>'+
   accountPanel();
   wireAccount();
