@@ -26,7 +26,7 @@ var PHOTO_FOLDER = 'Serracom Inventory Tracker Photos';
 var INV_HEADERS = ['STATUS', 'RADIO', 'NOTES', 'LOCATION', 'SERIAL NUMBER', 'SCANNED SN', 'ASSET NUMBER', 'SCANNED ASSET', 'DATE OF SCAN', 'PRODUCT CODE', 'LAST MOVED BY', 'LAST MOVED'];
 var MOVE_HEADERS = ['Timestamp', 'Transfer Location', 'Serial Number', 'Serial Number Picture', 'Asset Number', 'Asset Number Picture', 'Notes', 'Site ID if Installed', 'Radio Name', 'RADIO', 'MOVED BY'];
 var SESSION_DAYS = 120;
-var APP_VERSION = '2026-11-06';
+var APP_VERSION = '2026-11-06b';
 var SETTINGS_TAB = 'Settings';
 var SITES_TAB = 'Sites';
 var SITE_AREAS = { AU: 'Austin', CC: 'Corpus', SA: 'San Antonio', TK: 'Waco', WA: 'Waco', DA: 'Dallas' };
@@ -190,6 +190,7 @@ function teamMember_(ss, email) {
 function getData(token, sitesKey) {
   var ss = book_(), user = who_(ss, token), sk = sitesKey_(ss);
   addNewModels_(ss);
+  migrateAntennas_(ss);
   var out = { user: user, team: readTeam_(ss).map(function (m) { return { email: m.email, name: m.name, truck: m.truck, market: m.market, role: m.role }; }),
     lookup: readTab_(ss, 'Lookup'), consList: readTab_(ss, CONS_LIST_TAB), chatParts: readTab_(ss, CHAT_PARTS_TAB), chatSettings: readTab_(ss, CHAT_SETTINGS_TAB), settings: readTab_(ss, SETTINGS_TAB), sites: sitesKey && sitesKey === sk ? null : readTab_(ss, SITES_TAB), sitesKey: sk, markets: {}, locations: {}, models: [], tz: ss.getSpreadsheetTimeZone(), book: ss.getName() };
   Object.keys(MARKETS).forEach(function (m) {
@@ -270,6 +271,65 @@ function submitRedTag(token, f) {
     lock.releaseLock();
   }
 }
+/**
+ * One time: FFVV and HBXX antennas aren't serialized by T-Mobile, so they're consumables now.
+ * Each serialized row becomes +1 on the Consumables Stock tab at its location (good spares only), is copied to the
+ * "Removed Antenna SNs" tab as a backup, then deleted from the inventory tab. Resting stock moves to the Consumables List.
+ */
+function migrateAntennas_(ss) {
+  var props = PropertiesService.getScriptProperties();
+  if (props.getProperty('ANTENNA_MOVE') === '1') return;
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(15000)) return;
+  try {
+    if (props.getProperty('ANTENNA_MOVE') === '1') return;
+    var NAMES = ['FFVV', 'HBXX'], now = new Date(), backup = ss.getSheetByName('Removed Antenna SNs');
+    Object.keys(MARKETS).forEach(function (m) {
+      var c = MARKETS[m], sh = ss.getSheetByName(c.inv), st = ss.getSheetByName(c.stock);
+      if (!sh || !st || sh.getLastRow() < 2) return;
+      var h = headers_(sh), last = sh.getLastRow(), vals = sh.getRange(1, 1, last, h.length).getValues();
+      var ri = findCol_(h, ['RADIO']), si = findCol_(h, ['STATUS']), li = findCol_(h, ['LOCATION']), ni = findCol_(h, ['SERIAL NUMBER']);
+      var sth = headers_(st);
+      for (var r = last; r >= 2; r--) {
+        var row = vals[r - 1], model = String(row[ri]).trim().toUpperCase();
+        if (NAMES.indexOf(model) < 0) continue;
+        var loc = String(row[li]).trim().toUpperCase(), good = /^GOOD/i.test(String(row[si]).trim());
+        if (good && loc && loc !== 'SITE' && loc !== 'TELLWORKS') {
+          var lr = blankRow_(sth.length), put = function (n, v) { var i = findCol_(sth, [n]); if (i >= 0) lr[i] = v; };
+          put('TIMESTAMP', now); put('CONSUMABLE', model); put('QTY', 1); put('FROM', 'NEW STOCK'); put('TO', loc); put('ACTION', 'NEW');
+          put('NOTES', 'Moved from serialized inventory (SN ' + row[ni] + ')'); put('BY', 'app'); put('ENTRY ID', 'antenna');
+          st.getRange(nextRow_(st, 1), 1, 1, lr.length).setValues([lr]);
+        }
+        if (!backup) { backup = ss.insertSheet('Removed Antenna SNs'); backup.getRange(1, 1, 1, h.length + 2).setValues([['MARKET', 'REMOVED ON'].concat(h)]).setFontWeight('bold'); }
+        backup.appendRow([m, now].concat(row));
+        sh.deleteRow(r);
+      }
+    });
+    // resting stock for the antennas moves to the Consumables List (only where that list is still blank)
+    var set = ss.getSheetByName(SETTINGS_TAB), cl = ss.getSheetByName(CONS_LIST_TAB);
+    if (set && cl && set.getLastRow() > 1 && cl.getLastRow() > 1) {
+      var sh2 = headers_(set), smi = findCol_(sh2, ['MODEL']), sa = findCol_(sh2, ['AU RESTING STOCK']), sn = findCol_(sh2, ['HN RESTING STOCK']);
+      var rest = {}; set.getRange(2, 1, set.getLastRow() - 1, sh2.length).getValues().forEach(function (x) { rest[String(x[smi]).trim().toUpperCase()] = [sa >= 0 ? x[sa] : '', sn >= 0 ? x[sn] : '']; });
+      var ch = headers_(cl), cn = findCol_(ch, ['NAME']), ca = findCol_(ch, ['AU RESTING STOCK']), chn = findCol_(ch, ['HN RESTING STOCK']);
+      cl.getRange(2, 1, cl.getLastRow() - 1, ch.length).getValues().forEach(function (x, i) {
+        var k = rest[String(x[cn]).trim().toUpperCase()];
+        if (!k || NAMES.indexOf(String(x[cn]).trim().toUpperCase()) < 0) return;
+        if (ca >= 0 && x[ca] === '' && k[0] !== '') cl.getRange(i + 2, ca + 1).setValue(k[0]);
+        if (chn >= 0 && x[chn] === '' && k[1] !== '') cl.getRange(i + 2, chn + 1).setValue(k[1]);
+      });
+      // they no longer count toward radio spares
+      set.getRange(2, 1, set.getLastRow() - 1, sh2.length).getValues().forEach(function (x, i) {
+        if (NAMES.indexOf(String(x[smi]).trim().toUpperCase()) < 0) return;
+        if (sa >= 0) set.getRange(i + 2, sa + 1).setValue(0);
+        if (sn >= 0) set.getRange(i + 2, sn + 1).setValue(0);
+      });
+    }
+    props.setProperty('ANTENNA_MOVE', '1');
+  } finally {
+    lock.releaseLock();
+  }
+}
+
 /** A consumable used on a swap (jumper, fiber, SFP). No serial; it's ordered on CHAT like a red tag. */
 function submitConsumable(token, f) {
   var ss = book_(), user = actAs_(ss, who_(ss, token), f.as), c = market_(f.market);

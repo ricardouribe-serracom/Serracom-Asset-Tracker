@@ -313,6 +313,7 @@ var REASONS=["Will Not Power Up","Fault/OSS Alarms will not clear","RF Intermitt
 var SECTORS=["ALPHA","BETA","GAMMA","DELTA","EPSILON","ZETA"];
 var MARKETS={AU:{name:"AU",store:"AU WAREHOUSE",sitePh:"TK02047"},HN:{name:"HN",store:"HN WAREHOUSE",sitePh:"A3H0170A"}};
 var NOT_SPARE=["SITE","TELLWORKS"];
+var CONS_MODELS=["FFVV","HBXX"];   // antennas: counted as consumables, not serialized
 var STOCK_ORDER=["AHLOA","AEHC","AHFIG","AHLOB","AHFII","AAFIA","FXFC","FFVV","HBXX"];
 var DEFAULT_MODELS=["AEHC","AAFIA","AHLOA","AHFIG","AHLOB","AHFII","FXFC","FXFB","AVHA","FFVV","HBXX","FRIG","ABIA","ASIA","AHFIB","ASIK","ABIO"];
 var store={get:function(k){try{return localStorage.getItem(k);}catch(e){return null;}},set:function(k,v){try{localStorage.setItem(k,v);}catch(e){}}};
@@ -437,7 +438,9 @@ function build(r){
     r.sites.slice(1).forEach(function(x){ var id=SN(x[si]); if(!id||seen[id]) return; var m=H(x[sm]); if(!MARKETS[m]) m=/^[A-Z]{2}\d/.test(id)?"AU":"HN"; id=normSite(id,m); seen[id]=1;
       out.sites[m].push({id:id,area:S(sa>=0?x[sa]:"")||siteArea(id,m)}); });
     Object.keys(out.sites).forEach(function(m){ out.sites[m].sort(function(a,b){ return a.id.localeCompare(b.id); }); }); }
-  Object.keys(MARKETS).forEach(function(m){ out[m]=buildMarket(m,r.markets[m]||{}); });
+  Object.keys(MARKETS).forEach(function(m){ out[m]=buildMarket(m,r.markets[m]||{});
+    if(out[m].inv) out[m].inv=out[m].inv.filter(function(x){ return CONS_MODELS.indexOf(x.model)<0; }); });
+  if(out.targets) ["AU","HN"].forEach(function(m){ CONS_MODELS.forEach(function(md){ delete out.targets[m].models[md]; }); });
   return out;
 }
 function buildMarket(m,t){
@@ -633,6 +636,7 @@ function viewDashboard(){
         return '<tr><td><span class="model">'+esc(md)+'</span></td><td class="tot'+cls+'">'+tot+(rest?'<span class="of">/'+rest+'</span>':'')+'</td>'+c.map(function(x){return '<td>'+(x||'<span class="zero">0</span>')+'</td>';}).join("")+'</tr>'; }).join("")+'</tbody></table></div>'+
       '<p class="note">Orange: below resting stock. Blue: more than usual, like a replacement ordered before the swap.</p></section>';
   }
+  var ct=consTableHtml(cur,true); if(ct) table+='<section class="spares">'+ct+'</section>';
   var rc={}; tg.forEach(function(t){ var k=(t.reason||"No reason given").replace(/\s*[\/·]\s*BAD OUT THE BOX$/i,"").replace(/\s+/g," ").trim(), key=k.toLowerCase(); rc[key]=rc[key]||{label:k,n:0}; rc[key].n++; });
   var rs=Object.keys(rc).map(function(k){return rc[k];}).sort(function(a,b){return b.n-a.n;}).slice(0,8);
   app.innerHTML=liveLine()+
@@ -1657,17 +1661,19 @@ function viewConsInventory(){
   });
   drawConsStock();
 }
-function drawConsStock(){
-  var sec=document.getElementById("cxStock"); if(!sec) return;
-  var st=consStock(cur), locs=[]; Object.keys(st).forEach(function(it){ Object.keys(st[it]).forEach(function(l){ if(st[it][l]&&locs.indexOf(l)<0) locs.push(l); }); });
-  var store=MARKETS[cur].store; locs.sort(function(a,b){ return a===store?-1:b===store?1:a.localeCompare(b); });
-  var rest=function(c){ var n=parseInt(cur==="AU"?c.au:c.hn,10); return isNaN(n)?null:n; };
-  var rows=data.cons.map(function(c){ var s2=st[c.name]||{}, tot=0; locs.forEach(function(l){ tot+=s2[l]||0; }); var r=rest(c);
-    return '<tr><td>'+esc(c.name)+'</td><td class="'+(tot<0?'neg':'')+'">'+tot+(r!=null?'/'+r:'')+'</td>'+locs.map(function(l){ var n=s2[l]||0; return '<td class="'+(n<0?'neg':'')+'">'+(n||'·')+'</td>'; }).join("")+'</tr>'; }).join("");
-  sec.innerHTML='<div class="sec-h"><h2>Consumables on hand</h2><p>'+(locs.length?'By location':'Nothing logged yet')+'</p></div>'+
-    '<div class="tbl-wrap"><table><thead><tr><th>Consumable</th><th>Total</th>'+locs.map(function(l){ return '<th>'+esc(shortLoc(l))+'</th>'; }).join("")+'</tr></thead><tbody>'+rows+'</tbody></table></div>'+
-    '<p class="note">Red numbers are below zero: more was used than was logged in. A manager can fix it with Set count after a physical count.</p>';
+function consTableHtml(m,onlyActive){
+  var st=consStock(m), locs=[]; Object.keys(st).forEach(function(it){ Object.keys(st[it]).forEach(function(l){ if(st[it][l]&&locs.indexOf(l)<0) locs.push(l); }); });
+  var store=MARKETS[m].store; locs.sort(function(a,b){ return a===store?-1:b===store?1:a.localeCompare(b); });
+  var rest=function(c){ var n=parseInt(m==="AU"?c.au:c.hn,10); return isNaN(n)?null:n; };
+  var items=data.cons.filter(function(c){ if(!onlyActive) return true; var s2=st[c.name]||{}, r=rest(c); return (r||0)>0||locs.some(function(l){ return s2[l]; }); });
+  if(onlyActive&&!items.length) return "";
+  var rows=items.map(function(c){ var s2=st[c.name]||{}, tot=0; locs.forEach(function(l){ tot+=s2[l]||0; }); var r=rest(c), cls=tot<0?" neg":r&&tot<r?" low":r&&tot>r?" over":"";
+    return '<tr><td><span class="model">'+esc(c.name)+'</span></td><td class="tot'+cls+'">'+tot+(r?'<span class="of">/'+r+'</span>':'')+'</td>'+locs.map(function(l){ var n=s2[l]||0; return '<td class="'+(n<0?'neg':'')+'">'+(n||'<span class="zero">0</span>')+'</td>'; }).join("")+'</tr>'; }).join("");
+  return '<div class="sec-h"><h2>Consumables by location</h2><p>On hand / resting stock</p></div>'+
+    '<div class="tbl-wrap"><table><thead><tr><th>Consumable</th><th>Total</th>'+locs.map(function(l){ return '<th title="'+esc(title(l))+'">'+esc(shortLoc(l))+'</th>'; }).join("")+'</tr></thead><tbody>'+rows+'</tbody></table></div>'+
+    '<p class="note">Orange: below resting stock. Red: below zero, so more was used than was logged in. A manager fixes it with Set count (Inventory → Consumables).</p>';
 }
+function drawConsStock(){ var sec=document.getElementById("cxStock"); if(sec) sec.innerHTML=consTableHtml(cur,false); }
 function viewConsInstall(){
   var truck=myTruck(), opts=consOptions("");
   app.innerHTML=liveLine()+'<section><div class="sec-h"><h2>Install consumables to site</h2><p>Takes them '+(truck?'off '+esc(title(truck)):'from the shop')+'</p></div><form id="ciForm" novalidate>'+
