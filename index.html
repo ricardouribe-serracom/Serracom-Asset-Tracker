@@ -102,6 +102,10 @@ td .lowtag{font-size:11px;background:var(--warn-soft);color:var(--warn);border-r
 .controls{display:grid;gap:10px}
 .search{width:100%;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
 .chips{display:flex;gap:6px;flex-wrap:wrap}
+.pm{display:grid;grid-template-columns:1fr 1fr;background:var(--surface);border:2px solid var(--line);border-radius:12px;padding:3px;gap:3px;margin:4px 0 14px}
+.pm button{border:0;border-radius:9px;padding:10px 6px;font-weight:700;font-size:14px;background:none;color:var(--muted);cursor:pointer}
+.pm button[aria-pressed="true"]{background:var(--brand);color:#fff;box-shadow:inset 0 -3px 0 var(--accent)}
+.neg{color:var(--bad);font-weight:700}
 .chip{background:var(--chip);border:1px solid transparent;border-radius:999px;padding:5px 12px;font-size:13px;cursor:pointer}
 .chip[aria-pressed="true"]{background:var(--ink);color:var(--surface)}
 .model{display:inline-block;font-family:var(--display);font-weight:700;font-size:14px;letter-spacing:.04em;background:var(--chip);border-radius:4px;padding:0 6px}
@@ -154,7 +158,7 @@ td .lowtag{font-size:11px;background:var(--warn-soft);color:var(--warn);border-r
 
 nav.tabs{position:fixed;left:0;right:0;bottom:0;z-index:6;background:var(--surface);border-top:1px solid var(--line);
   padding:6px var(--gut-r) calc(6px + env(safe-area-inset-bottom,0px)) var(--gut-l)}
-.tabs-in{max-width:880px;margin:0 auto;display:grid;grid-template-columns:repeat(5,1fr);gap:2px}
+.tabs-in{max-width:880px;margin:0 auto;display:grid;grid-template-columns:repeat(4,1fr);gap:4px}
 .tabs button{background:none;border:0;border-radius:10px;padding:6px 4px;display:grid;justify-items:center;gap:2px;font-size:12px;font-weight:500;color:var(--muted);cursor:pointer;position:relative}
 .tabs button svg{width:22px;height:22px}
 .tabs button[aria-current="page"]{color:var(--head);background:var(--chip);box-shadow:inset 0 3px 0 var(--accent)}
@@ -299,7 +303,6 @@ body{padding-top:env(safe-area-inset-top,0px)}
     <button type="button" data-view="inventory"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7l9-4 9 4-9 4z"/><path d="M3 7v10l9 4 9-4V7"/><path d="M12 11v10"/></svg>Inventory</button>
     <button type="button" data-view="install"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v12"/><path d="M8 21h8"/><path d="M9 21l3-12 3 12"/><circle cx="12" cy="7" r="1.6"/><path d="M8.5 3.5a5 5 0 0 0 0 7"/><path d="M15.5 3.5a5 5 0 0 1 0 7"/></svg>Install</button>
     <button type="button" data-view="tags"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3h13v18H8l-5-5V8z"/><circle cx="8.5" cy="12" r="1.6"/></svg>Red tags<span class="badge" id="openBadge" hidden></span></button>
-    <button type="button" data-view="cons"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20c0-6 4-6 8-8s8-2 8-8"/><rect x="2" y="18" width="5" height="4" rx="1"/><rect x="17" y="2" width="5" height="4" rx="1"/></svg>Consumables<span class="badge" id="consBadge" hidden></span></button>
   </div>
 </nav>
 <div id="toastHost"></div>
@@ -417,6 +420,7 @@ function myTruck(){ var v=viewMember(); return v? H(v.truck) : user? H(user.truc
 function build(r){
   LOOKUP={}; (r.lookup||[]).slice(1).forEach(function(x){ var c=S(x[0]).replace(/\.0+$/,""), m=S(x[1]); if(c&&m) LOOKUP[c]=m; });
   var mods=[]; (r.models||[]).concat(DEFAULT_MODELS).forEach(function(m){ m=H(m); if(m&&mods.indexOf(m)<0) mods.push(m); });
+  mods=mods.filter(function(m){ return m!=="FFVV"&&m!=="HBXX"; });   // antennas aren't serialized by T-Mobile: they're consumables
   var out={models:mods,locations:r.locations||{},targets:null,chat:{parts:{},set:{AU:{},HN:{}}}};
   if(r.chatParts&&r.chatParts.length>1){ var ch=r.chatParts[0].map(H), cm=hidx(ch,["MODEL"]), cn=hidx(ch,["PART NAME"]), ct=hidx(ch,["TECHNOLOGIES"]);
     r.chatParts.slice(1).forEach(function(x){ var md=H(x[cm]); if(md) out.chat.parts[md]={part:S(x[cn]),tech:ct>=0?S(x[ct]):""}; }); }
@@ -426,8 +430,8 @@ function build(r){
     out.targets={AU:{total:0,models:{}},HN:{total:0,models:{}}};
     r.settings.slice(1).forEach(function(x){ var md=H(x[mi]); if(!md) return; [["AU",am],["HN",hm]].forEach(function(p){ var n=parseInt(x[p[1]],10); if(isNaN(n)) return; if(/^ALL MODELS/.test(md)) out.targets[p[0]].total=n; else out.targets[p[0]].models[md]=n; }); }); }
   out.cons=[];
-  if(r.consList&&r.consList.length>1){ var ch2=r.consList[0].map(H), cn2=hidx(ch2,["NAME"]), cc2=hidx(ch2,["CATEGORY"]), cp2=hidx(ch2,["PART NAME"]), ct2=hidx(ch2,["TECHNOLOGIES"]);
-    r.consList.slice(1).forEach(function(x){ var n=S(x[cn2]); if(n) out.cons.push({name:n,cat:S(x[cc2])||"Other",part:S(x[cp2]),tech:ct2>=0?S(x[ct2]):""}); }); }
+  if(r.consList&&r.consList.length>1){ var ch2=r.consList[0].map(H), cn2=hidx(ch2,["NAME"]), cc2=hidx(ch2,["CATEGORY"]), cp2=hidx(ch2,["PART NAME"]), ct2=hidx(ch2,["TECHNOLOGIES"]), ca2=hidx(ch2,["AU RESTING STOCK"]), ch3=hidx(ch2,["HN RESTING STOCK"]);
+    r.consList.slice(1).forEach(function(x){ var n=S(x[cn2]); if(n) out.cons.push({name:n,cat:S(x[cc2])||"Other",part:S(x[cp2]),tech:ct2>=0?S(x[ct2]):"",au:ca2>=0?x[ca2]:"",hn:ch3>=0?x[ch3]:""}); }); }
   out.sites={AU:[],HN:[]};
   if(r.sites&&r.sites.length>1){ var sh2=r.sites[0].map(H), si=hidx(sh2,["SITE ID"]), sm=hidx(sh2,["MARKET"]), sa=hidx(sh2,["AREA"]), seen={};
     r.sites.slice(1).forEach(function(x){ var id=SN(x[si]); if(!id||seen[id]) return; var m=H(x[sm]); if(!MARKETS[m]) m=/^[A-Z]{2}\d/.test(id)?"AU":"HN"; id=normSite(id,m); seen[id]=1;
@@ -437,7 +441,9 @@ function build(r){
   return out;
 }
 function buildMarket(m,t){
-  var res={inv:null,tags:[],cons:[]};
+  var res={inv:null,tags:[],cons:[],stock:[]};
+  if(t.stock&&t.stock.length>1){ var sq=t.stock[0].map(H), si3=function(n){ return hidx(sq,[n]); }, k3={ts:si3("TIMESTAMP"),it:si3("CONSUMABLE"),q:si3("QTY"),f:si3("FROM"),to:si3("TO"),a:si3("ACTION"),site:si3("SITE ID"),by:si3("BY")};
+    res.stock=t.stock.slice(1).map(function(x){ var it=S(x[k3.it]); if(!it) return null; return {date:toDate(x[k3.ts]),item:it,qty:parseInt(x[k3.q],10)||0,from:H(x[k3.f]),to:H(x[k3.to]),action:H(x[k3.a]),site:S(x[k3.site]),by:nameOf(x[k3.by])}; }).filter(Boolean); }
   if(t.cons&&t.cons.length>1){ var q=t.cons[0].map(H), ci=function(n){ return hidx(q,[n]); }, k2={ts:ci("TIMESTAMP"),site:ci("SITE ID"),inc:ci("INC #"),cat:ci("CATEGORY"),it:ci("CONSUMABLE"),pt:ci("PART NAME"),qty:ci("QTY"),rs:ci("FAILURE REASON"),sec:ci("SECTOR"),nt:ci("ALARM NOTES"),by:ci("EMAIL ADDRESS"),ph:ci("PHOTO"),ord:ci("ORDER SUBMITTED"),on:ci("ORDERED ON"),id:ci("ENTRY ID")};
     res.cons=t.cons.slice(1).map(function(x,i){ var d=toDate(x[k2.ts]), site=S(x[k2.site]), it=S(x[k2.it]); if(!d||!site||!it) return null;
       var o=x[k2.ord]; return {row:i+2,date:d,site:normSite(site,m),ticket:S(x[k2.inc]).toUpperCase(),cat:S(x[k2.cat]),item:it,part:S(x[k2.pt]),qty:parseInt(x[k2.qty],10)||1,reason:S(x[k2.rs]),sector:H(x[k2.sec]),notes:S(x[k2.nt]),
@@ -513,7 +519,7 @@ function flags(m){
     }
   }
   var oc=data[m].cons.filter(function(x){return !x.ordered;});
-  if(oc.length) out.push({crit:false,title:plural(oc.length,"consumable")+" still need"+(oc.length===1?"s":"")+" a CHAT order",detail:"Oldest is "+oc[oc.length-1].item+" at "+oc[oc.length-1].site+" from "+fmtDate(oc[oc.length-1].date)+". Mark order submitted on the Consumables tab once it's in."});
+  if(oc.length) out.push({crit:false,title:plural(oc.length,"consumable")+" still need"+(oc.length===1?"s":"")+" a CHAT order",detail:"Oldest is "+oc[oc.length-1].item+" at "+oc[oc.length-1].site+" from "+fmtDate(oc[oc.length-1].date)+". Mark order submitted on Red tags → Consumables once it's in."});
   return out.sort(function(a,b){return b.crit-a.crit;});
 }
 function locsFor(m){
@@ -566,14 +572,15 @@ function setViewAs(email){ viewAs=email||""; store.set("rtt-viewas",viewAs); set
 function wireRefresh(){ var ex=document.getElementById("exitPreview"); if(ex) ex.onclick=function(){ setViewAs(""); toast("Back to your view"); };
   var rb=document.getElementById("refreshBtn"); if(rb) rb.onclick=function(){ toast("Refreshing…"); load(true).then(function(){ if(!state.msg) toast("Up to date"); }); }; }
 function refreshLive(){ var l=document.getElementById("liveLine"); if(!l) return; var b=l.nextElementSibling; if(b&&b.classList.contains("banner")) b.parentNode.removeChild(b); var tmp=document.createElement("div"); tmp.innerHTML=liveLine(); while(tmp.lastChild) l.parentNode.insertBefore(tmp.lastChild,l.nextSibling); l.parentNode.removeChild(l); wireRefresh(); }
-function updateBadge(){ var b=document.getElementById("openBadge"); var n=data? data[cur].tags.filter(function(t){return t.ordered===false;}).length : 0; b.hidden=!n; b.textContent=n;
-  var c=document.getElementById("consBadge"), k=data? data[cur].cons.filter(function(x){return !x.ordered;}).length : 0; c.hidden=!k; c.textContent=k; }
+function updateBadge(){ var b=document.getElementById("openBadge"); var n=data? data[cur].tags.filter(function(t){return t.ordered===false;}).length+data[cur].cons.filter(function(x){return !x.ordered;}).length : 0; b.hidden=!n; b.textContent=n; }
 /** New data arrived: refresh lists without wiping a form someone is filling in. */
 function onData(){ updateBadge(); chrome();
   if(curView==="inventory"&&document.getElementById("xfForm")){ drawInv(); drawCheck(); refreshLive(); return; }
   if(curView==="install"&&document.getElementById("inForm")){ drawInstalled(); refreshLive(); return; }
   if(curView==="tags"&&document.getElementById("logForm")){ drawTags(); refreshLive(); return; }
-  if(curView==="cons"&&document.getElementById("consForm")){ drawCons(); refreshLive(); return; }
+  if(curView==="tags"&&document.getElementById("consForm")){ drawCons(); refreshLive(); return; }
+  if(curView==="inventory"&&document.getElementById("cxForm")){ drawConsStock(); refreshLive(); return; }
+  if(curView==="install"&&document.getElementById("ciForm")){ drawConsInstalled(); refreshLive(); return; }
   render(); }
 
 /* sign-in */
@@ -1602,15 +1609,96 @@ function checkBad(){ var el=document.getElementById("lBad"), h=document.getEleme
 function shrink(file){ return new Promise(function(res,rej){ var url=URL.createObjectURL(file), img=new Image(); img.onload=function(){ var s=Math.min(1,1600/Math.max(img.width,img.height)), c=document.createElement("canvas"); c.width=Math.round(img.width*s); c.height=Math.round(img.height*s); c.getContext("2d").drawImage(img,0,0,c.width,c.height); URL.revokeObjectURL(url); res(c.toDataURL("image/jpeg",.82).split(",")[1]); }; img.onerror=function(){ URL.revokeObjectURL(url); rej(new Error("read")); }; img.src=url; }); }
 
 /* ---------- navigation ---------- */
-var VIEWS={dashboard:viewDashboard,inventory:viewInventory,install:viewInstall,tags:viewTags,cons:viewCons};
+var partMode="asset";   // Asseted Parts (serialized radios) or Consumables (counted by quantity)
+try{ partMode=localStorage.getItem("rtt.partMode")==="cons"?"cons":"asset"; }catch(e){}
+function withParts(asset,cons){ return function(){ (partMode==="cons"?cons:asset)();
+  var tg='<div class="pm" role="group" aria-label="Part type"><button type="button" data-pm="asset" aria-pressed="'+(partMode==="asset")+'">Asseted Parts</button><button type="button" data-pm="cons" aria-pressed="'+(partMode==="cons")+'">Consumables</button></div>';
+  var live=document.getElementById("live"); if(live) live.insertAdjacentHTML("afterend",tg); else app.insertAdjacentHTML("afterbegin",tg);
+  [].forEach.call(app.querySelectorAll(".pm button"),function(b){ b.onclick=function(){ if(partMode===b.dataset.pm) return; partMode=b.dataset.pm; try{ localStorage.setItem("rtt.partMode",partMode); }catch(e){} render(); scrollTo(0,0); }; }); }; }
+var VIEWS={dashboard:viewDashboard,inventory:withParts(viewInventory,viewConsInventory),install:withParts(viewInstall,viewConsInstall),tags:withParts(viewTags,viewCons)};
+/* ---------- consumable stock (counted, no serials) ---------- */
+function consOptions(sel){ var cats={}, order=[]; data.cons.forEach(function(c){ if(!cats[c.cat]){ cats[c.cat]=[]; order.push(c.cat); } cats[c.cat].push(c); });
+  return order.map(function(k){ return '<optgroup label="'+esc(k)+'">'+cats[k].map(function(c){ return '<option value="'+esc(c.name)+'"'+(c.name===sel?' selected':'')+'>'+esc(c.name)+'</option>'; }).join("")+'</optgroup>'; }).join(""); }
+/** On hand per consumable per location, from the Consumables Stock log (a manager's COUNT resets that location). */
+function consStock(m){ var st={}, add=function(it,loc,n){ if(!loc||loc==="SITE"||loc==="NEW STOCK") return; st[it]=st[it]||{}; st[it][loc]=(st[it][loc]||0)+n; };
+  (data[m].stock||[]).forEach(function(x){ if(x.action==="COUNT"){ st[x.item]=st[x.item]||{}; st[x.item][x.to]=x.qty; return; } add(x.item,x.from,-x.qty); add(x.item,x.to,x.qty); }); return st; }
+function viewConsInventory(){
+  var truck=myTruck(), store=MARKETS[cur].store, opts=consOptions("");
+  app.innerHTML=liveLine()+'<section><div class="sec-h"><h2>Consumables to warehouse/truck</h2><p>Counted by quantity. Nothing to scan</p></div><form id="cxForm" novalidate>'+
+    '<div class="f2"><label>Consumable<select id="cxItem"><option value="">'+(opts?'Choose consumable':'No list yet (Consumables List tab)')+'</option>'+opts+'</select><span class="hint" id="cxHint"></span></label>'+
+    '<label>Quantity<input id="cxQty" type="number" inputmode="numeric" min="1" max="200" value="1"><span class="hint"></span></label></div>'+
+    '<fieldset class="dest"><legend>What are you doing?</legend><div class="seg" style="grid-template-columns:1fr 1fr 1fr">'+
+      '<label><input type="radio" name="cxAct" value="pick"'+(truck?' checked':' disabled')+'><span>Pick up<small>'+(truck?'Shop → '+esc(title(truck)):'No truck on Team tab')+'</small></span></label>'+
+      '<label><input type="radio" name="cxAct" value="drop"'+(truck?'':' disabled')+'><span>Drop off<small>'+(truck?esc(title(truck))+' → Shop':'No truck on Team tab')+'</small></span></label>'+
+      '<label><input type="radio" name="cxAct" value="new"'+(truck?'':' checked')+'><span>New stock in<small>Received → Shop</small></span></label></div></fieldset>'+
+    '<div id="cxErr" class="formerr" hidden></div><div class="actions"><button class="btn red" type="submit" id="cxBtn">Save</button></div></form></section>'+
+    (isMgr?'<section><div class="sec-h"><h2>Set a count</h2><p>Managers: after a physical count, set what\'s really there</p></div><form id="ccForm" novalidate><div class="f2">'+
+      '<label>Consumable<select id="ccItem"><option value="">Choose consumable</option>'+opts+'</select></label>'+
+      '<label>Location<select id="ccLoc">'+locsFor(cur).filter(function(l){return l!=="SITE"&&l!=="TELLWORKS";}).map(function(l){return '<option value="'+esc(l)+'">'+esc(title(l))+'</option>';}).join("")+'</select></label>'+
+      '<label>Count<input id="ccQty" type="number" inputmode="numeric" min="0" max="9999" value="0"></label></div>'+
+      '<div id="ccErr" class="formerr" hidden></div><div class="actions"><button class="btn quiet" type="submit" id="ccBtn">Set count</button></div></form></section>':'')+
+    '<section id="cxStock" class="spares"></section>';
+  var $=function(id){return document.getElementById(id);};
+  $("cxItem").addEventListener("change",function(){ var c=data.cons.filter(function(x){return x.name===$("cxItem").value;})[0]; $("cxHint").textContent=c&&c.part?c.part:""; });
+  $("cxForm").addEventListener("submit",function(e){ e.preventDefault();
+    var err=$("cxErr"), show=function(m){ err.hidden=false; err.textContent=m; }, item=$("cxItem").value, qty=parseInt($("cxQty").value,10), act=(document.querySelector('input[name=cxAct]:checked')||{}).value;
+    if(!item) return show("Choose the consumable."); if(!(qty>=1&&qty<=200)) return show("Quantity must be a number from 1 to 200."); if(!act) return show("Choose pick up, drop off or new stock.");
+    var f={as:asWho(),market:cur,item:item,qty:qty,action:act==="new"?"NEW":"MOVE",from:act==="pick"?store:act==="drop"?truck:"",to:act==="pick"?truck:store};
+    var btn=$("cxBtn"); btn.disabled=true; btn.textContent="Saving…"; err.hidden=true;
+    save("moveConsumable",[token,f],qty+" × "+item).then(function(r){ return load(true).then(function(){ render(); savedMsg(r,qty+" × "+item+(act==="pick"?" to "+title(truck):act==="drop"?" to the shop":" added to the shop")+"."); }); })
+      .catch(function(e2){ if(isAuthErr(e2)) return signedOut("Sign in again to continue."); show(errText(e2)); btn.disabled=false; btn.textContent="Save"; });
+  });
+  if($("ccForm")) $("ccForm").addEventListener("submit",function(e){ e.preventDefault();
+    var err=$("ccErr"), item=$("ccItem").value, n=parseInt($("ccQty").value,10), loc=$("ccLoc").value;
+    if(!item||!(n>=0)){ err.hidden=false; err.textContent="Choose the consumable and type the count."; return; }
+    var btn=$("ccBtn"); btn.disabled=true; btn.textContent="Saving…";
+    save("moveConsumable",[token,{as:asWho(),market:cur,item:item,qty:n,action:"COUNT",to:loc}],item+" count").then(function(r){ return load(true).then(function(){ render(); savedMsg(r,item+" at "+title(loc)+" set to "+n+"."); }); })
+      .catch(function(e2){ if(isAuthErr(e2)) return signedOut("Sign in again to continue."); err.hidden=false; err.textContent=errText(e2); btn.disabled=false; btn.textContent="Set count"; });
+  });
+  drawConsStock();
+}
+function drawConsStock(){
+  var sec=document.getElementById("cxStock"); if(!sec) return;
+  var st=consStock(cur), locs=[]; Object.keys(st).forEach(function(it){ Object.keys(st[it]).forEach(function(l){ if(st[it][l]&&locs.indexOf(l)<0) locs.push(l); }); });
+  var store=MARKETS[cur].store; locs.sort(function(a,b){ return a===store?-1:b===store?1:a.localeCompare(b); });
+  var rest=function(c){ var n=parseInt(cur==="AU"?c.au:c.hn,10); return isNaN(n)?null:n; };
+  var rows=data.cons.map(function(c){ var s2=st[c.name]||{}, tot=0; locs.forEach(function(l){ tot+=s2[l]||0; }); var r=rest(c);
+    return '<tr><td>'+esc(c.name)+'</td><td class="'+(tot<0?'neg':'')+'">'+tot+(r!=null?'/'+r:'')+'</td>'+locs.map(function(l){ var n=s2[l]||0; return '<td class="'+(n<0?'neg':'')+'">'+(n||'·')+'</td>'; }).join("")+'</tr>'; }).join("");
+  sec.innerHTML='<div class="sec-h"><h2>Consumables on hand</h2><p>'+(locs.length?'By location':'Nothing logged yet')+'</p></div>'+
+    '<div class="tbl-wrap"><table><thead><tr><th>Consumable</th><th>Total</th>'+locs.map(function(l){ return '<th>'+esc(shortLoc(l))+'</th>'; }).join("")+'</tr></thead><tbody>'+rows+'</tbody></table></div>'+
+    '<p class="note">Red numbers are below zero: more was used than was logged in. A manager can fix it with Set count after a physical count.</p>';
+}
+function viewConsInstall(){
+  var truck=myTruck(), opts=consOptions("");
+  app.innerHTML=liveLine()+'<section><div class="sec-h"><h2>Install consumables to site</h2><p>Takes them '+(truck?'off '+esc(title(truck)):'from the shop')+'</p></div><form id="ciForm" novalidate>'+
+    '<div class="f2">'+siteField("ciSite")+'<label>Consumable<select id="ciItem"><option value="">'+(opts?'Choose consumable':'No list yet (Consumables List tab)')+'</option>'+opts+'</select><span class="hint" id="ciHint"></span></label>'+
+    '<label>Quantity<input id="ciQty" type="number" inputmode="numeric" min="1" max="200" value="1"><span class="hint"></span></label></div>'+
+    '<div id="ciErr" class="formerr" hidden></div><div class="actions"><button class="btn red" type="submit" id="ciBtn">Install</button></div></form></section><section id="ciList"></section>';
+  var $=function(id){return document.getElementById(id);};
+  wireSite("ciSite");
+  $("ciItem").addEventListener("change",function(){ var c=data.cons.filter(function(x){return x.name===$("ciItem").value;})[0]; $("ciHint").textContent=c&&c.part?c.part:""; });
+  $("ciForm").addEventListener("submit",function(e){ e.preventDefault();
+    var err=$("ciErr"), show=function(m){ err.hidden=false; err.textContent=m; }, rs=resolveSite($("ciSite").value), item=$("ciItem").value, qty=parseInt($("ciQty").value,10);
+    if(rs.error) return show(rs.error); if(!rs.site) return show("Add the site ID."); if(!item) return show("Choose the consumable."); if(!(qty>=1&&qty<=200)) return show("Quantity must be a number from 1 to 200.");
+    var btn=$("ciBtn"); btn.disabled=true; btn.textContent="Saving…"; err.hidden=true;
+    save("moveConsumable",[token,{as:asWho(),market:cur,item:item,qty:qty,action:"INSTALL",site:rs.site,from:truck||MARKETS[cur].store}],qty+" × "+item+" at "+rs.site)
+      .then(function(r){ return load(true).then(function(){ render(); savedMsg(r,qty+" × "+item+" installed at "+rs.site+"."); }); })
+      .catch(function(e2){ if(isAuthErr(e2)) return signedOut("Sign in again to continue."); show(errText(e2)); btn.disabled=false; btn.textContent="Install"; });
+  });
+  drawConsInstalled();
+}
+function drawConsInstalled(){
+  var sec=document.getElementById("ciList"); if(!sec) return;
+  var ins=(data[cur].stock||[]).filter(function(x){ return x.action==="INSTALL"; }).slice().reverse().slice(0,40);
+  sec.innerHTML='<div class="sec-h"><h2>Recent consumable installs</h2><p>'+plural(ins.length,"install")+'</p></div><div class="tags">'+(ins.length?ins.map(function(x){
+    return '<article class="tag done"><div class="t1"><span class="site">'+esc(x.site)+'</span><span class="model">'+x.qty+' ×</span><span class="date">'+(x.date?fmtDate(x.date):'')+(x.by?" · "+esc(x.by):"")+'</span></div><dl><dt>Part</dt><dd>'+esc(x.item)+'</dd><dt>From</dt><dd>'+esc(title(x.from))+'</dd></dl></article>'; }).join(""):'<div class="empty">No consumables installed yet.</div>')+'</div>';
+}
 /* ---------- consumables (jumpers, fiber, SFPs: no serial) ---------- */
 var consFilter="open";
 function viewCons(){
   photos={};
-  var cats={}; data.cons.forEach(function(c){ (cats[c.cat]=cats[c.cat]||[]).push(c); });
-  var catOrder=Object.keys(cats).sort(function(a,b){ var sa=/^SFP/i.test(a)?0:1, sb=/^SFP/i.test(b)?0:1; return sa-sb; });   // SFPs first
-  var opts=catOrder.map(function(k){ return '<optgroup label="'+esc(k)+'">'+cats[k].map(function(c){ return '<option value="'+esc(c.name)+'">'+esc(c.name)+'</option>'; }).join("")+'</optgroup>'; }).join("");
-  app.innerHTML=liveLine()+'<section><div class="sec-h"><h2>Consumables used</h2><p>'+(viewMember()?'Adds it as you, for '+esc(viewMember().name):'Jumpers, fiber and SFPs. Nothing to scan')+'</p></div><form id="consForm" novalidate>'+
+  var opts=consOptions("");
+  app.innerHTML=liveLine()+'<section><div class="sec-h"><h2>Bad radio red tag · consumables</h2><p>'+(viewMember()?'Adds it as you, for '+esc(viewMember().name):'Jumpers, fiber and SFPs. Nothing to scan')+'</p></div><form id="consForm" novalidate>'+
     '<div id="cErr" class="formerr" hidden></div>'+
     '<div class="f2">'+siteField("cSite")+
       '<label>Ticket (INC #)<input id="cTicket" type="text" class="mono" placeholder="INC130236867" autocomplete="off" autocapitalize="characters"><span class="hint"></span></label></div>'+
