@@ -26,7 +26,7 @@ var PHOTO_FOLDER = 'Serracom Inventory Tracker Photos';
 var INV_HEADERS = ['STATUS', 'RADIO', 'NOTES', 'LOCATION', 'SERIAL NUMBER', 'SCANNED SN', 'ASSET NUMBER', 'SCANNED ASSET', 'DATE OF SCAN', 'PRODUCT CODE', 'LAST MOVED BY', 'LAST MOVED'];
 var MOVE_HEADERS = ['Timestamp', 'Transfer Location', 'Serial Number', 'Serial Number Picture', 'Asset Number', 'Asset Number Picture', 'Notes', 'Site ID if Installed', 'Radio Name', 'RADIO', 'MOVED BY'];
 var SESSION_DAYS = 120;
-var APP_VERSION = '2026-11-06b';
+var APP_VERSION = '2026-11-09';
 var SETTINGS_TAB = 'Settings';
 var SITES_TAB = 'Sites';
 var SITE_AREAS = { AU: 'Austin', CC: 'Corpus', SA: 'San Antonio', TK: 'Waco', WA: 'Waco', DA: 'Dallas' };
@@ -68,6 +68,7 @@ var API_FNS = {
   moveMarket: function (a) { return moveMarket(a[0], a[1], a[2]); },
   submitConsumable: function (a) { return submitConsumable(a[0], a[1]); },
   moveConsumable: function (a) { return moveConsumable(a[0], a[1]); },
+  returnAll: function (a) { return returnAll(a[0], a[1]); },
   setConsOrdered: function (a) { return setConsOrdered(a[0], a[1], a[2], a[3]); }
 };
 function api(body) {
@@ -244,6 +245,7 @@ function submitRedTag(token, f) {
   try {
     var sh = ss.getSheetByName(c.tags);
     if (!sh) throw new Error('NO_TAB:' + c.tags);
+    if (f.group) ensureCol_(sh, 'GROUP ID');
     if (f.sector) ensureCol_(sh, 'SECTOR');
     var h = headers_(sh), row = blankRow_(h.length);
     var put = function (names, value) { var i = findCol_(h, names); if (i >= 0) row[i] = value; };
@@ -259,6 +261,7 @@ function submitRedTag(token, f) {
     if (f.market === 'HN') put(['STATUS'], 'Bad');
     put(['SERIAL NUMBER PICTURE OR ASSET IF NO SN', 'SERIAL NUMBER PICTURE'], photoBad);
     put(['EMAIL ADDRESS'], user.email);
+    put(['GROUP ID'], f.group || '');
     if (notesCol >= 0) row[notesCol] = f.notes || '';
     var r = nextRow_(sh, 1);
     sh.getRange(r, 1, 1, row.length).setValues([row]);
@@ -345,13 +348,13 @@ function submitConsumable(token, f) {
   try {
     var sh = ss.getSheetByName(c.cons);
     if (!sh) throw new Error('NO_TAB:' + c.cons);
-    ensureCol_(sh, 'ENTRY ID');
+    ensureCol_(sh, 'ENTRY ID'); if (f.group) ensureCol_(sh, 'GROUP ID');
     var h = headers_(sh), row = blankRow_(h.length), now = new Date(), entry = Utilities.getUuid().slice(0, 8);
     var put = function (name, value) { var i = findCol_(h, [name]); if (i >= 0) row[i] = value; };
     put('TIMESTAMP', now); put('SITE ID', f.site); put('INC #', f.ticket); put('CATEGORY', f.cat || '');
     put('CONSUMABLE', f.item); put('PART NAME', f.part || ''); put('QTY', 1); put('FAILURE REASON', f.reason);
     put('SECTOR', String(f.sector).toUpperCase()); put('ALARM NOTES', f.notes); put('EMAIL ADDRESS', user.email); put('PHOTO', photo);
-    put('ORDER SUBMITTED', false); put('ENTRY ID', entry);
+    put('ORDER SUBMITTED', false); put('ENTRY ID', entry); put('GROUP ID', f.group || '');
     // one row per unit used: 3 jumpers = 3 rows, tied together by ENTRY ID
     var rows = []; for (var q = 0; q < qty; q++) rows.push(row.slice());
     var r = nextRow_(sh, 1);
@@ -396,6 +399,64 @@ function moveConsumable(token, f) {
     sh.getRange(r, 1, 1, row.length).setValues([row]);
     if (action === 'INSTALL') addSite_(ss, f.site, f.market, user);
     return JSON.stringify({ ok: true, row: r, from: from, to: to });
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/**
+ * Return everything on a lead's truck to the market's warehouse in one go (leads leaving the market).
+ * kind 'asset': every radio/AOSD row at the truck (good or bad) moves to the warehouse, one log line each.
+ * kind 'cons': whatever count of each consumable is on the truck moves to the warehouse.
+ */
+function returnAll(token, f) {
+  var ss = book_(), user = actAs_(ss, who_(ss, token), f.as), c = market_(f.market);
+  var truck = String(f.truck || truckOf_(user)).trim().toUpperCase();
+  if (!truck) throw new Error('NO_TRUCK');
+  if (user.role !== 'MANAGER' && truck !== truckOf_(user).toUpperCase()) throw new Error('NO_TRUCK');
+  var lock = LockService.getScriptLock();
+  lock.waitLock(25000);
+  try {
+    var moved = [];
+    if (f.kind === 'cons') {
+      var st = ss.getSheetByName(c.stock);
+      if (!st) throw new Error('NO_TAB:' + c.stock);
+      var h = headers_(st), vals = st.getLastRow() > 1 ? st.getRange(2, 1, st.getLastRow() - 1, h.length).getValues() : [];
+      var ix = function (n) { return findCol_(h, [n]); }, onTruck = {};
+      vals.forEach(function (r) {
+        var it = String(r[ix('CONSUMABLE')]).trim(), q = Number(r[ix('QTY')]) || 0, a = String(r[ix('ACTION')]).toUpperCase();
+        var fr = String(r[ix('FROM')]).trim().toUpperCase(), to = String(r[ix('TO')]).trim().toUpperCase();
+        if (!it) return;
+        if (a === 'COUNT') { if (to === truck) onTruck[it] = q; return; }
+        if (fr === truck) onTruck[it] = (onTruck[it] || 0) - q;
+        if (to === truck) onTruck[it] = (onTruck[it] || 0) + q;
+      });
+      var rows = [], now = new Date();
+      Object.keys(onTruck).forEach(function (it) {
+        if (onTruck[it] <= 0) return;
+        var row = blankRow_(h.length), put = function (n, v) { var i = ix(n); if (i >= 0) row[i] = v; };
+        put('TIMESTAMP', now); put('CONSUMABLE', it); put('QTY', onTruck[it]); put('FROM', truck); put('TO', c.store); put('ACTION', 'MOVE');
+        put('NOTES', 'Return all to warehouse'); put('BY', user.email); put('ENTRY ID', Utilities.getUuid().slice(0, 8));
+        rows.push(row); moved.push(onTruck[it] + ' × ' + it);
+      });
+      if (rows.length) st.getRange(nextRow_(st, 1), 1, rows.length, h.length).setValues(rows);
+    } else {
+      var sh = ss.getSheetByName(c.inv);
+      if (!sh) throw new Error('NO_TAB:' + c.inv);
+      var col = function (n) { return invCol_(sh, n); }, last = sh.getLastRow();
+      if (last >= 2) {
+        var locs = sh.getRange(2, col('LOCATION'), last - 1, 1).getValues();
+        locs.forEach(function (l, i) {
+          if (String(l[0]).trim().toUpperCase() !== truck) return;
+          var r = i + 2, sn = sh.getRange(r, col('SERIAL NUMBER')).getValue(), model = sh.getRange(r, col('RADIO')).getValue();
+          sh.getRange(r, col('LOCATION')).setValue(c.store);
+          stampRow_(sh, r, user);
+          logMove_(ss, c, { loc: c.store, sn: norm_(sn), model: model, by: byLine_(user), notes: 'Return all to warehouse from ' + truck });
+          moved.push(String(sn));
+        });
+      }
+    }
+    return JSON.stringify({ ok: true, moved: moved, to: c.store });
   } finally {
     lock.releaseLock();
   }
@@ -844,8 +905,8 @@ var TAB_LAYOUT = {
   'HN Inventory Tracker': MOVE_HEADERS
 };
 var LOOKUP_ROWS = [[474331, 'AHLOA'], [475125, 'AHFIG'], [475910, 'AHLOB'], [475656, 'AHFII'], [475124, 'AEHC'], [474486, 'AAFIA'], [472679, 'FXFC'], [476268, 'AVHA'],
-  [472569, 'FXFB'], [472704, 'FRIG'], [473096, 'ABIA'], [473095, 'ASIA'], [474216, 'AHFIB'], [474021, 'ASIK'], [475266, 'ABIO']];
-var RADIO_MODELS = ['AEHC', 'AAFIA', 'AHLOA', 'AHFIG', 'AHLOB', 'AHFII', 'FXFC', 'FXFB', 'AVHA', 'FFVV', 'HBXX', 'FRIG', 'ABIA', 'ASIA', 'AHFIB', 'ASIK', 'ABIO'];
+  [472569, 'FXFB'], [472704, 'FRIG'], [473096, 'ABIA'], [473095, 'ASIA'], [474216, 'AHFIB'], [474021, 'ASIK'], [475266, 'ABIO'], [474902, 'AOSD']];
+var RADIO_MODELS = ['AEHC', 'AAFIA', 'AHLOA', 'AHFIG', 'AHLOB', 'AHFII', 'FXFC', 'FXFB', 'AVHA', 'FFVV', 'HBXX', 'FRIG', 'ABIA', 'ASIA', 'AHFIB', 'ASIK', 'ABIO', 'AOSD'];
 /** Resting stock: how many good spares of each we normally keep. FFVV = FFVV-65C-R2N23 antenna, HBXX = HBXX-3319DS-A2M antenna. */
 var RESTING_STOCK = { AAFIA: 2, AEHC: 5, AHFIG: 8, AHFII: 3, AHLOA: 11, AHLOB: 1, FXFC: 2, FXFB: 0, AVHA: 0, FFVV: 3, HBXX: 1 };
 var MODEL_NAMES = { FFVV: 'FFVV-65C-R2N23 antenna', HBXX: 'HBXX-3319DS-A2M antenna' };
@@ -885,7 +946,7 @@ function applyResting_(ss) {
  * Adds models and product codes the sheet doesn't have yet (Settings, Lookup, model dropdowns).
  * Runs once by itself after a release that changes MODELS_REV. Never changes numbers already on the Settings tab.
  */
-var MODELS_REV = '4';
+var MODELS_REV = '5';
 /** Consumables: parts ordered on CHAT with no serial (jumpers, fiber, SFPs). Editable on the Consumables List tab. */
 var CONS_LIST_TAB = 'Consumables List';
 var CONS_LIST_HEADERS = ['NAME', 'CATEGORY', 'PART NAME', 'PRODUCT CODE', 'TECHNOLOGIES', 'AU RESTING STOCK', 'HN RESTING STOCK'];
