@@ -680,7 +680,8 @@ function installRadio(token, market, d) {
 
 /** Anyone: flag a radio as bad (a spare that turns out dead). */
 function markBad(token, market, sn, reason, asEmail) {
-  var ss = book_(), user = actAs_(ss, who_(ss, token), asEmail), c = market_(market);
+  var ss = book_(), me = who_(ss, token); requireManager_(me);
+  var user = actAs_(ss, me, asEmail), c = market_(market);
   var lock = LockService.getScriptLock();
   lock.waitLock(20000);
   try {

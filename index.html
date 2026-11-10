@@ -855,7 +855,7 @@ function drawInv(){
   document.getElementById("invList").innerHTML=list.length? list.map(function(r){
     var pill=r.status==="GOOD"?'<span class="pill good">Good</span>':'<span class="pill bad">'+esc(title(r.status))+'</span>';
     var where=r.loc==="TELLWORKS"? 'Tellworks'+(r.rma?' · RMA '+r.rma:'')+(r.shipped?' · shipped '+fmtDate(r.shipped):'') : title(r.loc)+(r.site?" · "+r.site:"")+(r.note&&/^Pulled from/.test(r.note)?" · "+r.note:"");
-    var canReport=r.status==="GOOD"&&r.loc!=="SITE"&&r.loc!=="TELLWORKS";
+    var canReport=isMgr&&r.status==="GOOD"&&r.loc!=="SITE"&&r.loc!=="TELLWORKS";
     return '<div class="row"><div class="main"><span class="model">'+esc(r.model)+'</span><span class="mono">'+esc(r.sn)+'</span>'+pill+'</div>'+
       '<div class="sub"><span>'+esc(where)+esc(movedLine(r))+'</span>'+(r.asset&&r.asset!=="NA"?'<span class="mono">'+esc(r.asset)+'</span>':"")+'</div>'+
       (isMgr?'<select class="move" data-sn="'+esc(r.sn)+'" data-row="'+r.row+'" aria-label="Move '+esc(r.sn)+'">'+(r.loc==="NO LOCATION"?'<option value="" selected>No location</option>':"")+locs.filter(function(l){return l!=="NO LOCATION";}).map(function(l){return '<option value="'+esc(l)+'"'+(l===r.loc?" selected":"")+'>'+esc(title(l))+'</option>';}).join("")+
