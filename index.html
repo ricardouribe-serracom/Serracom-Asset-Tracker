@@ -1781,7 +1781,7 @@ function viewCons(){
     '<div id="cErr" class="formerr" hidden></div>'+
     '<div class="f2">'+siteField("cSite")+
       '<label>Ticket (INC #)<input id="cTicket" type="text" class="mono" placeholder="INC130236867" autocomplete="off" autocapitalize="characters"><span class="hint"></span></label></div>'+
-    '<p class="note">Site and ticket once. Add an item for each kind of part you used.</p>'+
+    '<p class="note">Site and ticket once. Add an item for each kind of part you used. They\'re installed at the site and taken off '+esc(title(myTruck()||MARKETS[cur].store))+' automatically.</p>'+
     '<div id="cLines"></div><button class="btn quiet" type="button" id="addLine">+ Add another part</button>'+
     '<div class="actions"><button class="btn red" type="submit" id="cBtn">Log consumables</button></div></form></section><section id="consSec"></section>';
   var $=function(id){return document.getElementById(id);};
@@ -1817,7 +1817,7 @@ function viewCons(){
       var f={as:asWho(),market:cur,site:site,ticket:ticket,item:l.item,cat:l.cat,part:l.part,qty:l.qty,reason:l.reason,sector:l.sector,notes:l.notes,group:group,photo:l.photo?{data:l.photo,mime:"image/jpeg"}:null};
       return save("submitConsumable",[token,f],l.qty+" × "+l.item+" at "+site).then(function(r){ last=r; return next(); }); };
     next().then(function(r){ consFilter="open"; return load(true).then(function(){ render();
-        savedMsg(r,(lines.length>1?lines.length+" items":lines[0].qty+" × "+lines[0].item)+" logged for "+site+"."); var t=document.getElementById("consSec"); if(t) t.scrollIntoView({behavior:"smooth"}); }); })
+        savedMsg(r,(lines.length>1?lines.length+" items":lines[0].qty+" × "+lines[0].item)+" logged and installed at "+site+", taken off "+title(myTruck()||MARKETS[cur].store)+"."); var t=document.getElementById("consSec"); if(t) t.scrollIntoView({behavior:"smooth"}); }); })
       .catch(function(e2){ if(isAuthErr(e2)) return signedOut("Sign in again to continue."); show((k>1?"Saved "+(k-1)+" of "+lines.length+". Item "+k+": ":"")+errText(e2)); btn.disabled=false; btn.textContent="Log consumables";
         for(var d=0; d<k-1; d++){ var fs=document.querySelectorAll("#cLines .part")[0]; if(fs) fs.remove(); } });
   });

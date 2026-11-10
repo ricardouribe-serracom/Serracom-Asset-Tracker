@@ -359,8 +359,16 @@ function submitConsumable(token, f) {
     var rows = []; for (var q = 0; q < qty; q++) rows.push(row.slice());
     var r = nextRow_(sh, 1);
     sh.getRange(r, 1, qty, row.length).setValues(rows);
+    // the replacement went up at the site: install it there and take it off the lead's truck (or the shop) in the same step
+    var from = (truckOf_(user) || c.store).toUpperCase(), st = ss.getSheetByName(c.stock);
+    if (st) {
+      var sh2 = headers_(st), mv = blankRow_(sh2.length), put2 = function (n, v) { var i = findCol_(sh2, [n]); if (i >= 0) mv[i] = v; };
+      put2('TIMESTAMP', now); put2('CONSUMABLE', f.item); put2('QTY', qty); put2('FROM', from); put2('TO', 'SITE'); put2('ACTION', 'INSTALL');
+      put2('SITE ID', f.site); put2('NOTES', 'Red tag ' + f.ticket); put2('BY', user.email); put2('ENTRY ID', entry);
+      st.getRange(nextRow_(st, 1), 1, 1, mv.length).setValues([mv]);
+    }
     addSite_(ss, f.site, f.market, user);
-    return JSON.stringify({ ok: true, row: r });
+    return JSON.stringify({ ok: true, row: r, installedFrom: from });
   } finally {
     lock.releaseLock();
   }
