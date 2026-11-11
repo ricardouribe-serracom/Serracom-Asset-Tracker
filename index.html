@@ -1694,7 +1694,7 @@ function withParts(asset,cons){ return function(){ (partMode==="cons"?cons:asset
   var tg='<div class="pm" role="group" aria-label="Part type"><button type="button" data-pm="asset" aria-pressed="'+(partMode==="asset")+'">Asseted Parts</button><button type="button" data-pm="cons" aria-pressed="'+(partMode==="cons")+'">Consumables</button></div>';
   var live=document.getElementById("live"); if(live) live.insertAdjacentHTML("afterend",tg); else app.insertAdjacentHTML("afterbegin",tg);
   [].forEach.call(app.querySelectorAll(".pm button"),function(b){ b.onclick=function(){ if(partMode===b.dataset.pm) return; partMode=b.dataset.pm; try{ localStorage.setItem("rtt.partMode",partMode); }catch(e){} render(); scrollTo(0,0); }; }); }; }
-var VIEWS={dashboard:viewDashboard,inventory:withParts(viewInventory,viewConsInventory),install:withParts(viewInstall,viewConsInstall),tags:viewTags};
+var VIEWS={dashboard:viewDashboard,inventory:withParts(viewInventory,viewConsInventory),install:viewInstall,tags:viewTags};
 /* ---------- consumable stock (counted, no serials) ---------- */
 function consOptions(sel){ var cats={}, order=[]; data.cons.forEach(function(c){ if(!cats[c.cat]){ cats[c.cat]=[]; order.push(c.cat); } cats[c.cat].push(c); });
   return order.map(function(k){ return '<optgroup label="'+esc(k)+'">'+cats[k].map(function(c){ return '<option value="'+esc(c.name)+'"'+(c.name===sel?' selected':'')+'>'+esc(c.name)+'</option>'; }).join("")+'</optgroup>'; }).join(""); }
