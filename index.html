@@ -1694,9 +1694,9 @@ function viewConsInventory(){
     '<div class="f2"><label>Consumable<select id="cxItem"><option value="">'+(opts?'Choose consumable':'No list yet (Consumables List tab)')+'</option>'+opts+'</select><span class="hint" id="cxHint"></span></label>'+
     '<label>Quantity<input id="cxQty" type="number" inputmode="numeric" min="1" max="200" value="1"><span class="hint"></span></label></div>'+
     '<fieldset class="dest"><legend>What are you doing?</legend><div class="seg" style="grid-template-columns:1fr 1fr 1fr">'+
+      '<label><input type="radio" name="cxAct" value="new"'+(truck?'':' checked')+'><span>New stock in<small>Received → Shop</small></span></label>'+
       '<label><input type="radio" name="cxAct" value="pick"'+(truck?' checked':' disabled')+'><span>Pick up<small>'+(truck?'Shop → '+esc(title(truck)):'No truck on Team tab')+'</small></span></label>'+
-      '<label><input type="radio" name="cxAct" value="drop"'+(truck?'':' disabled')+'><span>Drop off<small>'+(truck?esc(title(truck))+' → Shop':'No truck on Team tab')+'</small></span></label>'+
-      '<label><input type="radio" name="cxAct" value="new"'+(truck?'':' checked')+'><span>New stock in<small>Received → Shop</small></span></label></div></fieldset>'+
+      '<label><input type="radio" name="cxAct" value="drop"'+(truck?'':' disabled')+'><span>Drop off<small>'+(truck?esc(title(truck))+' → Shop':'No truck on Team tab')+'</small></span></label></div></fieldset>'+
     '<div id="cxErr" class="formerr" hidden></div><div class="actions"><button class="btn red" type="submit" id="cxBtn">Save</button></div></form></section>'+
     (isMgr?'<section><div class="sec-h"><h2>Set a count</h2><p>Managers: after a physical count, set what\'s really there</p></div><form id="ccForm" novalidate><div class="f2">'+
       '<label>Consumable<select id="ccItem"><option value="">Choose consumable</option>'+opts+'</select></label>'+
