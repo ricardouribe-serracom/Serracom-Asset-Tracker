@@ -179,7 +179,8 @@ function readTeam_(ss) {
     var market = String(r[col('MARKET')] || '').trim().toUpperCase();
     var truck = String(r[col('TRUCK')] || '').trim().toUpperCase();
     var role = String(r[col('ROLE')] || '').trim().toUpperCase() === 'MANAGER' ? 'MANAGER' : 'LEAD';
-    return { email: email, name: name, market: MARKETS[market] ? market : 'BOTH', truck: truck, role: role };
+    var noAlerts = col('ALERTS') >= 0 && /^(NO|N|FALSE|OFF)$/i.test(String(r[col('ALERTS')]).trim());
+    return { email: email, name: name, market: MARKETS[market] ? market : 'BOTH', truck: truck, role: role, noAlerts: noAlerts };
   }).filter(Boolean);
 }
 function teamMember_(ss, email) {
@@ -233,6 +234,24 @@ function listFromValidation_(ss, tab, a1) {
 
 /* ---------- red tags ---------- */
 /** Logs a red tag and moves the pulled radio to the lead's truck (or the shop) as bad. */
+/** Emails every manager on the Team tab when a red tag is made (put NO in an ALERTS column to opt out).
+    Multi-part red tags send one email, with the last part. */
+function redTagAlert_(ss, user, f, kind) {
+  try {
+    if (f.group && !f.alert) return;
+    var to = readTeam_(ss).filter(function (m) { return m.role === 'MANAGER' && !m.noAlerts; }).map(function (m) { return m.email; });
+    if (!to.length) return;
+    var lines = (f.alert && f.alert.length ? f.alert : [kind === 'cons' ? f.qty + ' x ' + f.item : (f.model + ' ' + f.badSn)]).map(function (l) { return '  - ' + String(l).slice(0, 120); });
+    var who = user.forName ? user.name + ' for ' + user.forName : user.name;
+    MailApp.sendEmail({
+      to: to.join(','),
+      subject: 'Red tag ' + f.market + ' ' + f.site + ' ' + f.ticket + ' (' + lines.length + (kind === 'cons' ? ' consumable' : ' part') + (lines.length > 1 ? 's' : '') + ')',
+      name: 'Serracom Inventory Tracker',
+      body: who + ' made a ' + (kind === 'cons' ? 'consumables ' : '') + 'red tag.\n\nSite: ' + f.site + '\nTicket: ' + f.ticket + '\n\n' + lines.join('\n') + '\n\nOpen the app to mark the order submitted.'
+    });
+  } catch (e) { console.log('alert failed: ' + e); }
+}
+
 function submitRedTag(token, f) {
   var ss = book_(), user = actAs_(ss, who_(ss, token), f.as), c = market_(f.market);
   if (user.forName) f.notes = (f.notes ? f.notes + ' · ' : '') + 'Logged by ' + user.name + ' for ' + user.forName;
@@ -269,6 +288,7 @@ function submitRedTag(token, f) {
     var box = !!f.box || /BAD OUT THE BOX/i.test(String(f.reason));
     addSite_(ss, f.site, f.market, user);
     var inv = pullToInventory_(ss, user, c, { sn: f.badSn, model: f.model, asset: f.asset, site: f.site, status: box ? 'BAD OUT THE BOX' : 'BAD' });
+    redTagAlert_(ss, user, f, 'asset');
     return JSON.stringify({ ok: true, row: r, inv: inv });
   } finally {
     lock.releaseLock();
@@ -368,6 +388,7 @@ function submitConsumable(token, f) {
       st.getRange(nextRow_(st, 1), 1, 1, mv.length).setValues([mv]);
     }
     addSite_(ss, f.site, f.market, user);
+    redTagAlert_(ss, user, f, 'cons');
     return JSON.stringify({ ok: true, row: r, installedFrom: from });
   } finally {
     lock.releaseLock();

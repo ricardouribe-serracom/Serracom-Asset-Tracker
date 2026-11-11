@@ -1642,7 +1642,7 @@ function wireLogForm(){
     var btn=$("logBtn"); btn.disabled=true; err.hidden=true;
     var group=parts.length>1?Math.random().toString(36).slice(2,10):"", last=null, k=0;
     var next=function(){ if(k>=parts.length) return Promise.resolve(last); var p=parts[k++]; btn.textContent="Saving "+k+" of "+parts.length+"…";
-      var f={as:asWho(),market:cur,site:site,ticket:ticket,model:p.model,badSn:p.badSn,reason:p.reason,notes:p.notes,asset:p.asset,box:p.box,sector:p.sector,group:group,photoBad:p.photo?{data:p.photo,mime:"image/jpeg"}:null};
+      var f={as:asWho(),market:cur,site:site,ticket:ticket,model:p.model,badSn:p.badSn,reason:p.reason,notes:p.notes,asset:p.asset,box:p.box,sector:p.sector,group:group,alert:group&&k===parts.length?parts.map(function(x){return x.model+" "+x.badSn+" · "+x.reason;}):null,photoBad:p.photo?{data:p.photo,mime:"image/jpeg"}:null};
       return save("submitRedTag",[token,f],"Red tag "+site+" · "+p.badSn).then(function(r){ last=r; return next(); }); };
     next().then(function(r){ tagFilter="open"; return load(true).then(function(){ render();
         savedMsg(r,"Red tag created for "+site+(parts.length>1?" with "+parts.length+" parts":"")+". "+(parts.length>1?"They're":parts[0].badSn+" is")+" now with "+title(myTruck()||MARKETS[cur].store)+", marked bad.");
@@ -1814,7 +1814,7 @@ function viewCons(){
     var btn=$("cBtn"); btn.disabled=true; err.hidden=true;
     var group=lines.length>1?Math.random().toString(36).slice(2,10):"", last=null, k=0;
     var next=function(){ if(k>=lines.length) return Promise.resolve(last); var l=lines[k++]; btn.textContent="Saving "+k+" of "+lines.length+"…";
-      var f={as:asWho(),market:cur,site:site,ticket:ticket,item:l.item,cat:l.cat,part:l.part,qty:l.qty,reason:l.reason,sector:l.sector,notes:l.notes,group:group,photo:l.photo?{data:l.photo,mime:"image/jpeg"}:null};
+      var f={as:asWho(),market:cur,site:site,ticket:ticket,item:l.item,cat:l.cat,part:l.part,qty:l.qty,reason:l.reason,sector:l.sector,notes:l.notes,group:group,alert:group&&k===lines.length?lines.map(function(x){return x.qty+" x "+x.item+" · "+x.reason;}):null,photo:l.photo?{data:l.photo,mime:"image/jpeg"}:null};
       return save("submitConsumable",[token,f],l.qty+" × "+l.item+" at "+site).then(function(r){ last=r; return next(); }); };
     next().then(function(r){ consFilter="open"; return load(true).then(function(){ render();
         savedMsg(r,(lines.length>1?lines.length+" items":lines[0].qty+" × "+lines[0].item)+" logged and installed at "+site+", taken off "+title(myTruck()||MARKETS[cur].store)+"."); var t=document.getElementById("consSec"); if(t) t.scrollIntoView({behavior:"smooth"}); }); })
