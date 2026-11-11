@@ -110,7 +110,9 @@ td .lowtag{font-size:11px;background:var(--warn-soft);color:var(--warn);border-r
 .gp{border-top:1px solid var(--line);padding:9px 0}.gp1,.gp2{display:flex;justify-content:space-between;align-items:center;gap:8px}.gp2{margin-top:4px;font-size:13px;color:var(--muted)}
 .gp details{margin-top:4px;font-size:13px}.gp summary{color:var(--brand);cursor:pointer}.gsub{font-size:13px;color:var(--muted);margin:2px 0 4px}.gsub .err{color:var(--bad)}
 .part{border:2px solid var(--line);border-radius:12px;padding:12px;margin:0 0 12px}.part legend{font-weight:700;padding:0 6px;display:flex;gap:10px;align-items:center}
-.part legend button{border:0;background:none;color:var(--bad);font-size:13px;cursor:pointer;text-decoration:underline}
+.ksw{display:inline-flex;border:1px solid var(--line);border-radius:999px;overflow:hidden;margin-left:4px}.ksw button{border:0;background:none;padding:4px 10px;font:inherit;font-size:13px;font-weight:600;color:var(--muted);cursor:pointer}.ksw button[aria-pressed=true]{background:var(--brand);color:#fff}
+.addrow{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:4px}
+.part legend button[data-rm]{border:0;background:none;color:var(--bad);font-size:13px;cursor:pointer;text-decoration:underline}
 .chip{background:var(--chip);border:1px solid transparent;border-radius:999px;padding:5px 12px;font-size:13px;cursor:pointer}
 .chip[aria-pressed="true"]{background:var(--ink);color:var(--surface)}
 .model{display:inline-block;font-family:var(--display);font-weight:700;font-size:14px;letter-spacing:.04em;background:var(--chip);border-radius:4px;padding:0 6px}
@@ -989,9 +991,9 @@ var tagFilter="open";
 function tagState(t){ return t.ordered===false?"open" : t.ordered===true?"ordered" : "other"; }
 function viewTags(){
   photos={};
-  app.innerHTML=liveLine()+logFormHtml()+'<section id="tagSec"></section>';
+  app.innerHTML=liveLine()+logFormHtml()+'<section id="tagSec"></section><section id="consSec"></section>';
   wireLogForm();
-  drawTags();
+  drawTags(); wireConsList();
   document.getElementById("tagSec").addEventListener("click",function(e){
     var ch=e.target.closest(".chip"); if(ch){ tagFilter=ch.dataset.f; drawTags(); return; }
     var o=e.target.closest("[data-order]"); if(!o) return;
@@ -1579,7 +1581,7 @@ var photos={};
    tied together by a GROUP ID so the list shows one card per site. */
 var partCount=0;
 function partHtml(i){
-  return '<fieldset class="part" data-i="'+i+'"><legend>Part '+i+(i>1?'<button type="button" data-rm="'+i+'">Remove</button>':'')+'</legend><div class="f2">'+
+  return '<fieldset class="part" data-i="'+i+'" data-kind="asset">'+partLegend(i,"asset")+'<div class="f2">'+
     scanField("lBad_"+i,"Bad Radio SN","serial",false)+
     '<label>Radio<select id="lModel_'+i+'"><option value="">Choose radio</option>'+data.models.map(function(m){return '<option>'+esc(m)+'</option>';}).join("")+'</select><span class="hint"></span></label>'+
     scanField("lAsset_"+i,"T-Mobile asset tag","asset",true)+
@@ -1589,46 +1591,70 @@ function partHtml(i){
     '<label>Alarm notes (required)<textarea id="lNotes_'+i+'" placeholder="TX out of order on ports 3 & 4, water intrusion, VSWR…"></textarea></label>'+
     '<div class="photos"><label>Pulled part serial tag<input id="ph_'+i+'" type="file" accept="image/*" hidden><span class="btn quiet sm" role="button" tabindex="0" data-for="ph_'+i+'" id="ph_'+i+'b">Add photo</span><img class="thumb" id="ph_'+i+'p" alt="Pulled part label photo" hidden><span class="hint" id="ph_'+i+'h"></span></label></div></fieldset>';
 }
+function partLegend(i,kind){
+  return '<legend>Part '+i+(i===1?'<span class="ksw" role="group" aria-label="Part type"><button type="button" data-kind="asset" aria-pressed="'+(kind==="asset")+'">Asseted</button><button type="button" data-kind="cons" aria-pressed="'+(kind==="cons")+'">Consumable</button></span>'
+    :' · '+(kind==="asset"?'Asseted':'Consumable')+'<button type="button" data-rm="'+i+'">Remove</button>')+'</legend>';
+}
 function logFormHtml(){
   partCount=0; photos={};
   return '<section><div class="sec-h"><h2>Bad radio red tag</h2><p>'+(viewMember()?'Adds the red tag as you, for '+esc(viewMember().name):'Adds the red tag to the sheet as '+esc(user?user.name:"you"))+'</p></div><form id="logForm" novalidate>'+
     '<div id="logErr" class="formerr" hidden></div>'+
     '<div class="f2">'+siteField("lSite")+
       '<label>Ticket (INC #)<input id="lTicket" type="text" class="mono" placeholder="INC130236867" autocomplete="off" autocapitalize="characters"><span class="hint"></span></label></div>'+
-    '<p class="note">Site and ticket once. Add a part for each one you pulled. They move to '+esc(myTruck()?title(myTruck()):title(MARKETS[cur].store))+', marked bad, ready to ship to Tellworks.</p>'+
-    '<div id="parts"></div><button class="btn quiet" type="button" id="addPart">+ Add another part</button>'+
+    '<p class="note">Site and ticket once, then a part for each one you pulled. Asseted parts move to '+esc(title(myTruck()||MARKETS[cur].store))+' marked bad. Consumables are installed at the site and taken off '+esc(title(myTruck()||MARKETS[cur].store))+'.</p>'+
+    '<div id="parts"></div><div class="addrow"><button class="btn quiet" type="button" id="addAsset">+ Add asseted part</button><button class="btn quiet" type="button" id="addCons">+ Add consumable</button></div>'+
     '<div class="actions"><button class="btn red" type="submit" id="logBtn">Create red tag</button></div></form></section>';
 }
-function addPart(){
-  var i=++partCount, box=document.getElementById("parts"), $=function(id){return document.getElementById(id);};
-  box.insertAdjacentHTML("beforeend",partHtml(i));
+function addPart(kind,replace){
+  var i=replace?+replace.dataset.i:++partCount, box=document.getElementById("parts"), $=function(id){return document.getElementById(id);};
+  var html=kind==="cons"?consLineHtml(i,consOptions("")):partHtml(i);
+  if(replace){ delete photos["ph_"+i]; delete photos["c"+i]; delete scanHooks["lBad_"+i]; replace.insertAdjacentHTML("afterend",html); replace.remove(); }
+  else box.insertAdjacentHTML("beforeend",html);
   var fs=box.querySelector('.part[data-i="'+i+'"]');
-  wireScan(fs);
-  var setPhoto=function(b64,fromScan){ photos["ph_"+i]=b64; var img=$("ph_"+i+"p"); img.src="data:image/jpeg;base64,"+b64; img.hidden=false; $("ph_"+i+"b").textContent="Replace photo"; $("ph_"+i+"h").textContent=fromScan?"From your scan":""; };
-  scanHooks["lBad_"+i]=function(r){ if(r.model&&!$("lModel_"+i).value) $("lModel_"+i).value=r.model; checkBad(i); if(r.photo&&!photos["ph_"+i]) setPhoto(r.photo,true); };
-  $("lBad_"+i).addEventListener("input",function(){ checkBad(i); });
-  var pb=$("ph_"+i+"b"), open=function(e){ e.preventDefault(); $("ph_"+i).click(); };
-  pb.addEventListener("click",open); pb.addEventListener("keydown",function(e){ if(e.key==="Enter"||e.key===" ") open(e); });
-  $("ph_"+i).addEventListener("change",function(){ var f=$("ph_"+i).files[0]; if(!f) return; shrink(f).then(function(d){ setPhoto(d,false); }).catch(function(){ toast("That photo couldn't be read. Try another."); }); });
-  var rm=fs.querySelector("[data-rm]"); if(rm) rm.onclick=function(){ delete photos["ph_"+i]; fs.remove(); };
-  if(i>1) fs.scrollIntoView({behavior:"smooth",block:"start"});
+  if(kind==="cons"){
+    $("cItem_"+i).addEventListener("change",function(){ var c=data.cons.filter(function(x){return x.name===$("cItem_"+i).value;})[0]; $("cItem_"+i+"Hint").textContent=c&&c.part?c.part:""; });
+    $("cPh_"+i+"b").addEventListener("click",function(e){ e.preventDefault(); $("cPh_"+i).click(); });
+    $("cPh_"+i).addEventListener("change",function(){ var f=$("cPh_"+i).files[0]; if(!f) return; shrink(f).then(function(d){ photos["c"+i]=d; $("cPh_"+i+"p").src="data:image/jpeg;base64,"+d; $("cPh_"+i+"p").hidden=false; $("cPh_"+i+"b").textContent="Replace photo"; }).catch(function(){ toast("That photo couldn't be read. Try another."); }); });
+  } else {
+    wireScan(fs);
+    var setPhoto=function(b64,fromScan){ photos["ph_"+i]=b64; var img=$("ph_"+i+"p"); img.src="data:image/jpeg;base64,"+b64; img.hidden=false; $("ph_"+i+"b").textContent="Replace photo"; $("ph_"+i+"h").textContent=fromScan?"From your scan":""; };
+    scanHooks["lBad_"+i]=function(r){ if(r.model&&!$("lModel_"+i).value) $("lModel_"+i).value=r.model; checkBad(i); if(r.photo&&!photos["ph_"+i]) setPhoto(r.photo,true); };
+    $("lBad_"+i).addEventListener("input",function(){ checkBad(i); });
+    var pb=$("ph_"+i+"b"), open=function(e){ e.preventDefault(); $("ph_"+i).click(); };
+    pb.addEventListener("click",open); pb.addEventListener("keydown",function(e){ if(e.key==="Enter"||e.key===" ") open(e); });
+    $("ph_"+i).addEventListener("change",function(){ var f=$("ph_"+i).files[0]; if(!f) return; shrink(f).then(function(d){ setPhoto(d,false); }).catch(function(){ toast("That photo couldn't be read. Try another."); }); });
+  }
+  var rm=fs.querySelector("[data-rm]"); if(rm) rm.onclick=function(){ delete photos["ph_"+i]; delete photos["c"+i]; fs.remove(); };
+  [].forEach.call(fs.querySelectorAll(".ksw button"),function(b){ b.onclick=function(){ if(b.dataset.kind!==fs.dataset.kind) addPart(b.dataset.kind,fs); }; });
+  if(i>1&&!replace) fs.scrollIntoView({behavior:"smooth",block:"start"});
 }
 function wireLogForm(){
   var $=function(id){return document.getElementById(id);};
   wireSite("lSite");
-  addPart();
-  $("addPart").onclick=addPart;
+  addPart(partMode==="cons"?"cons":"asset");
+  $("addAsset").onclick=function(){ addPart("asset"); };
+  $("addCons").onclick=function(){ addPart("cons"); };
   $("logForm").addEventListener("submit",function(e){ e.preventDefault();
     var err=$("logErr"), show=function(m){ err.hidden=false; err.textContent=m; err.scrollIntoView({block:"center",behavior:"smooth"}); };
     var rs=resolveSite($("lSite").value), site=rs.site, tk=S($("lTicket").value).toUpperCase(), ticket=/^\d+$/.test(tk)?"INC"+tk:tk;
     var top=[]; if(!site) top.push("site ID"); if(!ticket) top.push("ticket number");
     if(rs.error) return show(rs.error);
     if(top.length) return show("Add "+top.join(", ")+".");
-    var blocks=[].slice.call(document.querySelectorAll("#parts .part")), parts=[], seen={};
+    var blocks=[].slice.call(document.querySelectorAll("#parts .part")), calls=[], seen={};
     for(var b=0;b<blocks.length;b++){
-      var i=blocks[b].dataset.i, n=b+1, pre=blocks.length>1?"Part "+n+": ":"";
+      var i=blocks[b].dataset.i, pre=blocks.length>1?"Part "+(b+1)+": ":"", miss=[];
+      if(blocks[b].dataset.kind==="cons"){
+        var item=$("cItem_"+i).value, qty=parseInt($("cQty_"+i).value,10), creason=$("cReason_"+i).value, csector=$("cSector_"+i).value, cnotes=S($("cNotes_"+i).value);
+        if(!item) miss.push("consumable"); if(!creason) miss.push("failure reason"); if(!csector) miss.push("sector"); if(!cnotes) miss.push("alarm notes");
+        if(miss.length) return show(pre+"Add "+miss.join(", ")+".");
+        if(!(qty>=1&&qty<=50)) return show(pre+"Quantity must be a number from 1 to 50.");
+        var c=data.cons.filter(function(x){return x.name===item;})[0]||{};
+        calls.push({fn:"submitConsumable",label:qty+" × "+item+" at "+site,line:qty+" x "+item+" · "+creason,
+          f:{item:item,cat:c.cat||"",part:c.part||"",qty:qty,reason:creason,sector:csector,notes:cnotes,photo:photos["c"+i]?{data:photos["c"+i],mime:"image/jpeg"}:null}});
+        continue;
+      }
       var bf=fieldVal("lBad_"+i,"bad radio serial"), af=fieldVal("lAsset_"+i,"asset tag"), model=$("lModel_"+i).value, reason=$("lReason_"+i).value, sector=$("lSector_"+i).value, notes=S($("lNotes_"+i).value), box=$("lBox_"+i).checked;
-      var miss=[]; if(!bf.value) miss.push("bad radio serial"); if(!model) miss.push("radio"); if(!reason) miss.push("failure reason"); if(!sector) miss.push("sector"); if(!notes) miss.push("alarm notes");
+      if(!bf.value) miss.push("bad radio serial"); if(!model) miss.push("radio"); if(!reason) miss.push("failure reason"); if(!sector) miss.push("sector"); if(!notes) miss.push("alarm notes");
       if(miss.length) return show(pre+"Add "+miss.join(", ")+".");
       var ferr=bf.error||af.error; if(ferr) return show(pre+ferr);
       if(!/^[A-Z0-9]{6,20}$/.test(bf.value)) return show(pre+"Serials use only letters and numbers, at least 6 characters.");
@@ -1636,19 +1662,22 @@ function wireLogForm(){
       seen[bf.value]=1;
       var typed=[]; if(bf.typed) typed.push("pulled serial"); if(af.typed&&af.value) typed.push("asset tag");
       if(typed.length) notes=notes+" · Typed by hand: "+typed.join(", ");
-      parts.push({badSn:bf.value,asset:af.value,model:model,reason:box?reason+" / BAD OUT THE BOX":reason,box:box,sector:sector,notes:notes,photo:photos["ph_"+i]});
+      var rsn=box?reason+" / BAD OUT THE BOX":reason;
+      calls.push({fn:"submitRedTag",label:"Red tag "+site+" · "+bf.value,line:model+" "+bf.value+" · "+rsn,
+        f:{model:model,badSn:bf.value,reason:rsn,notes:notes,asset:af.value,box:box,sector:sector,photoBad:photos["ph_"+i]?{data:photos["ph_"+i],mime:"image/jpeg"}:null}});
     }
-    if(!parts.length) return show("Add at least one part.");
+    if(!calls.length) return show("Add at least one part.");
     var btn=$("logBtn"); btn.disabled=true; err.hidden=true;
-    var group=parts.length>1?Math.random().toString(36).slice(2,10):"", last=null, k=0;
-    var next=function(){ if(k>=parts.length) return Promise.resolve(last); var p=parts[k++]; btn.textContent="Saving "+k+" of "+parts.length+"…";
-      var f={as:asWho(),market:cur,site:site,ticket:ticket,model:p.model,badSn:p.badSn,reason:p.reason,notes:p.notes,asset:p.asset,box:p.box,sector:p.sector,group:group,alert:group&&k===parts.length?parts.map(function(x){return x.model+" "+x.badSn+" · "+x.reason;}):null,photoBad:p.photo?{data:p.photo,mime:"image/jpeg"}:null};
-      return save("submitRedTag",[token,f],"Red tag "+site+" · "+p.badSn).then(function(r){ last=r; return next(); }); };
-    next().then(function(r){ tagFilter="open"; return load(true).then(function(){ render();
-        savedMsg(r,"Red tag created for "+site+(parts.length>1?" with "+parts.length+" parts":"")+". "+(parts.length>1?"They're":parts[0].badSn+" is")+" now with "+title(myTruck()||MARKETS[cur].store)+", marked bad.");
-        var t=document.getElementById("tagSec"); if(t) t.scrollIntoView({behavior:"smooth"}); }); })
-      .catch(function(e2){ if(isAuthErr(e2)) return signedOut("Sign in again to continue."); show((k>1?"Saved "+(k-1)+" of "+parts.length+". Part "+k+": ":"")+errText(e2)); btn.disabled=false; btn.textContent="Create red tag";
-        if(k>1){ for(var d=0; d<k-1; d++){ var fs=document.querySelectorAll("#parts .part")[0]; if(fs) fs.remove(); } } });
+    var group=calls.length>1?Math.random().toString(36).slice(2,10):"", last=null, k=0, lines=calls.map(function(x){return x.line;});
+    var next=function(){ if(k>=calls.length) return Promise.resolve(last); var cl=calls[k++]; btn.textContent="Saving "+k+" of "+calls.length+"…";
+      var f=cl.f; f.as=asWho(); f.market=cur; f.site=site; f.ticket=ticket; f.group=group; f.alert=group&&k===calls.length?lines:null;
+      return save(cl.fn,[token,f],cl.label).then(function(r){ last=r; return next(); }); };
+    var hasCons=calls.some(function(x){return x.fn==="submitConsumable";}), hasAsset=calls.some(function(x){return x.fn==="submitRedTag";});
+    next().then(function(r){ tagFilter="open"; consFilter="open"; return load(true).then(function(){ render();
+        savedMsg(r,"Red tag created for "+site+(calls.length>1?" with "+calls.length+" parts":"")+"."+(hasCons?" Consumables installed and taken off "+title(myTruck()||MARKETS[cur].store)+".":""));
+        var t=document.getElementById(hasAsset?"tagSec":"consSec"); if(t) t.scrollIntoView({behavior:"smooth"}); }); })
+      .catch(function(e2){ if(isAuthErr(e2)) return signedOut("Sign in again to continue."); show((k>1?"Saved "+(k-1)+" of "+calls.length+". Part "+k+": ":"")+errText(e2)); btn.disabled=false; btn.textContent="Create red tag";
+        for(var d=0; d<k-1; d++){ var fs=document.querySelectorAll("#parts .part")[0]; if(fs) fs.remove(); } });
   });
 }
 function checkBad(i){ var el=document.getElementById("lBad_"+i), h=document.getElementById("lBad_"+i+"Hint"); if(!el||!h) return; var v=SN(el.value); if(!v) return;
@@ -1665,7 +1694,7 @@ function withParts(asset,cons){ return function(){ (partMode==="cons"?cons:asset
   var tg='<div class="pm" role="group" aria-label="Part type"><button type="button" data-pm="asset" aria-pressed="'+(partMode==="asset")+'">Asseted Parts</button><button type="button" data-pm="cons" aria-pressed="'+(partMode==="cons")+'">Consumables</button></div>';
   var live=document.getElementById("live"); if(live) live.insertAdjacentHTML("afterend",tg); else app.insertAdjacentHTML("afterbegin",tg);
   [].forEach.call(app.querySelectorAll(".pm button"),function(b){ b.onclick=function(){ if(partMode===b.dataset.pm) return; partMode=b.dataset.pm; try{ localStorage.setItem("rtt.partMode",partMode); }catch(e){} render(); scrollTo(0,0); }; }); }; }
-var VIEWS={dashboard:viewDashboard,inventory:withParts(viewInventory,viewConsInventory),install:withParts(viewInstall,viewConsInstall),tags:withParts(viewTags,viewCons)};
+var VIEWS={dashboard:viewDashboard,inventory:withParts(viewInventory,viewConsInventory),install:withParts(viewInstall,viewConsInstall),tags:viewTags};
 /* ---------- consumable stock (counted, no serials) ---------- */
 function consOptions(sel){ var cats={}, order=[]; data.cons.forEach(function(c){ if(!cats[c.cat]){ cats[c.cat]=[]; order.push(c.cat); } cats[c.cat].push(c); });
   return order.map(function(k){ return '<optgroup label="'+esc(k)+'">'+cats[k].map(function(c){ return '<option value="'+esc(c.name)+'"'+(c.name===sel?' selected':'')+'>'+esc(c.name)+'</option>'; }).join("")+'</optgroup>'; }).join(""); }
@@ -1766,7 +1795,7 @@ function drawConsInstalled(){
 var consFilter="open";
 var consLines=0;
 function consLineHtml(i,opts){
-  return '<fieldset class="part" data-i="'+i+'"><legend>Item '+i+(i>1?'<button type="button" data-rm="'+i+'">Remove</button>':'')+'</legend><div class="f2">'+
+  return '<fieldset class="part" data-i="'+i+'" data-kind="cons">'+partLegend(i,"cons")+'<div class="f2">'+
     '<label>Consumable<select id="cItem_'+i+'"><option value="">'+(opts?'Choose consumable':'No list yet (Consumables List tab)')+'</option>'+opts+'</select><span class="hint" id="cItem_'+i+'Hint"></span></label>'+
     '<label>Quantity used<input id="cQty_'+i+'" type="number" inputmode="numeric" min="1" max="50" value="1"><span class="hint"></span></label>'+
     '<label>Failure reason<select id="cReason_'+i+'"><option value="">Choose reason</option>'+REASONS.map(function(r){return '<option>'+esc(r)+'</option>';}).join("")+'</select><span class="hint"></span></label>'+
@@ -1774,55 +1803,9 @@ function consLineHtml(i,opts){
     '<label>Alarm notes (required)<textarea id="cNotes_'+i+'" placeholder="Damaged jumper on port 2, water in connector…"></textarea></label>'+
     '<div class="photos"><label>Photo (optional)<input id="cPh_'+i+'" type="file" accept="image/*" hidden><span class="btn quiet sm" role="button" tabindex="0" id="cPh_'+i+'b">Add photo</span><img class="thumb" id="cPh_'+i+'p" alt="Consumable photo" hidden></label></div></fieldset>';
 }
-function viewCons(){
-  photos={}; consLines=0;
-  var opts=consOptions("");
-  app.innerHTML=liveLine()+'<section><div class="sec-h"><h2>Bad radio red tag · consumables</h2><p>'+(viewMember()?'Adds it as you, for '+esc(viewMember().name):'Jumpers, fiber and SFPs. Nothing to scan')+'</p></div><form id="consForm" novalidate>'+
-    '<div id="cErr" class="formerr" hidden></div>'+
-    '<div class="f2">'+siteField("cSite")+
-      '<label>Ticket (INC #)<input id="cTicket" type="text" class="mono" placeholder="INC130236867" autocomplete="off" autocapitalize="characters"><span class="hint"></span></label></div>'+
-    '<p class="note">Site and ticket once. Add an item for each kind of part you used. They\'re installed at the site and taken off '+esc(title(myTruck()||MARKETS[cur].store))+' automatically.</p>'+
-    '<div id="cLines"></div><button class="btn quiet" type="button" id="addLine">+ Add another part</button>'+
-    '<div class="actions"><button class="btn red" type="submit" id="cBtn">Log consumables</button></div></form></section><section id="consSec"></section>';
-  var $=function(id){return document.getElementById(id);};
-  wireSite("cSite");
-  var addLine=function(){ var i=++consLines, box=$("cLines"); box.insertAdjacentHTML("beforeend",consLineHtml(i,opts));
-    var fs=box.querySelector('.part[data-i="'+i+'"]');
-    $("cItem_"+i).addEventListener("change",function(){ var c=data.cons.filter(function(x){return x.name===$("cItem_"+i).value;})[0]; $("cItem_"+i+"Hint").textContent=c&&c.part?c.part:""; });
-    $("cPh_"+i+"b").addEventListener("click",function(e){ e.preventDefault(); $("cPh_"+i).click(); });
-    $("cPh_"+i).addEventListener("change",function(){ var f=$("cPh_"+i).files[0]; if(!f) return; shrink(f).then(function(d){ photos["c"+i]=d; $("cPh_"+i+"p").src="data:image/jpeg;base64,"+d; $("cPh_"+i+"p").hidden=false; $("cPh_"+i+"b").textContent="Replace photo"; }).catch(function(){ toast("That photo couldn't be read. Try another."); }); });
-    var rm=fs.querySelector("[data-rm]"); if(rm) rm.onclick=function(){ delete photos["c"+i]; fs.remove(); };
-    if(i>1) fs.scrollIntoView({behavior:"smooth",block:"start"}); };
-  addLine(); $("addLine").onclick=addLine;
-  $("consForm").addEventListener("submit",function(e){ e.preventDefault();
-    var err=$("cErr"), show=function(m){ err.hidden=false; err.textContent=m; err.scrollIntoView({block:"center",behavior:"smooth"}); };
-    var rs=resolveSite($("cSite").value), site=rs.site, tk=S($("cTicket").value).toUpperCase(), ticket=/^\d+$/.test(tk)?"INC"+tk:tk;
-    var top=[]; if(!site) top.push("site ID"); if(!ticket) top.push("ticket number");
-    if(rs.error) return show(rs.error);
-    if(top.length) return show("Add "+top.join(", ")+".");
-    var blocks=[].slice.call(document.querySelectorAll("#cLines .part")), lines=[];
-    for(var b=0;b<blocks.length;b++){
-      var i=blocks[b].dataset.i, pre=blocks.length>1?"Item "+(b+1)+": ":"";
-      var item=$("cItem_"+i).value, qty=parseInt($("cQty_"+i).value,10), reason=$("cReason_"+i).value, sector=$("cSector_"+i).value, notes=S($("cNotes_"+i).value);
-      var miss=[]; if(!item) miss.push("consumable"); if(!reason) miss.push("failure reason"); if(!sector) miss.push("sector"); if(!notes) miss.push("alarm notes");
-      if(miss.length) return show(pre+"Add "+miss.join(", ")+".");
-      if(!(qty>=1&&qty<=50)) return show(pre+"Quantity must be a number from 1 to 50.");
-      var c=data.cons.filter(function(x){return x.name===item;})[0]||{};
-      lines.push({item:item,cat:c.cat||"",part:c.part||"",qty:qty,reason:reason,sector:sector,notes:notes,photo:photos["c"+i]});
-    }
-    if(!lines.length) return show("Add at least one item.");
-    var btn=$("cBtn"); btn.disabled=true; err.hidden=true;
-    var group=lines.length>1?Math.random().toString(36).slice(2,10):"", last=null, k=0;
-    var next=function(){ if(k>=lines.length) return Promise.resolve(last); var l=lines[k++]; btn.textContent="Saving "+k+" of "+lines.length+"…";
-      var f={as:asWho(),market:cur,site:site,ticket:ticket,item:l.item,cat:l.cat,part:l.part,qty:l.qty,reason:l.reason,sector:l.sector,notes:l.notes,group:group,alert:group&&k===lines.length?lines.map(function(x){return x.qty+" x "+x.item+" · "+x.reason;}):null,photo:l.photo?{data:l.photo,mime:"image/jpeg"}:null};
-      return save("submitConsumable",[token,f],l.qty+" × "+l.item+" at "+site).then(function(r){ last=r; return next(); }); };
-    next().then(function(r){ consFilter="open"; return load(true).then(function(){ render();
-        savedMsg(r,(lines.length>1?lines.length+" items":lines[0].qty+" × "+lines[0].item)+" logged and installed at "+site+", taken off "+title(myTruck()||MARKETS[cur].store)+"."); var t=document.getElementById("consSec"); if(t) t.scrollIntoView({behavior:"smooth"}); }); })
-      .catch(function(e2){ if(isAuthErr(e2)) return signedOut("Sign in again to continue."); show((k>1?"Saved "+(k-1)+" of "+lines.length+". Item "+k+": ":"")+errText(e2)); btn.disabled=false; btn.textContent="Log consumables";
-        for(var d=0; d<k-1; d++){ var fs=document.querySelectorAll("#cLines .part")[0]; if(fs) fs.remove(); } });
-  });
+function wireConsList(){
   drawCons();
-  $("consSec").addEventListener("click",function(e){
+  document.getElementById("consSec").addEventListener("click",function(e){
     var ch=e.target.closest(".chip"); if(ch){ consFilter=ch.dataset.f; drawCons(); return; }
     var o=e.target.closest("[data-corder]"); if(!o) return;
     var x=data[cur].cons.filter(function(y){return String(y.row)===o.dataset.corder;})[0]; if(!x) return; var val=o.dataset.val==="1"; o.disabled=true; o.textContent="Saving…";

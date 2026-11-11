@@ -245,9 +245,9 @@ function redTagAlert_(ss, user, f, kind) {
     var who = user.forName ? user.name + ' for ' + user.forName : user.name;
     MailApp.sendEmail({
       to: to.join(','),
-      subject: 'Red tag ' + f.market + ' ' + f.site + ' ' + f.ticket + ' (' + lines.length + (kind === 'cons' ? ' consumable' : ' part') + (lines.length > 1 ? 's' : '') + ')',
+      subject: 'Red tag ' + f.market + ' ' + f.site + ' ' + f.ticket + ' (' + lines.length + (lines.length > 1 ? ' parts' : kind === 'cons' ? ' consumable' : ' part') + ')',
       name: 'Serracom Inventory Tracker',
-      body: who + ' made a ' + (kind === 'cons' ? 'consumables ' : '') + 'red tag.\n\nSite: ' + f.site + '\nTicket: ' + f.ticket + '\n\n' + lines.join('\n') + '\n\nOpen the app to mark the order submitted.'
+      body: who + ' made a red tag.\n\nSite: ' + f.site + '\nTicket: ' + f.ticket + '\n\n' + lines.join('\n') + '\n\nOpen the app to mark the order submitted.'
     });
   } catch (e) { console.log('alert failed: ' + e); }
 }
