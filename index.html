@@ -1028,7 +1028,8 @@ function exportChat(){
     var notes=t.notes.replace(/\s*\u00b7\s*Typed by hand:.*$/,"").replace(/\s*\u00b7\s*Logged by .*$/,"");
     return [t.site,t.ticket,t.model,p.part||"",t.badSn,t.asset==="NA"?"":t.asset,t.reason,t.sector,p.tech||"",notes,set["GC"]||"",set["PICKUP LOCATION"]||"",set["PHONE"]||"","Continuous",fmtDate(t.date),1].map(q).join(","); });
   oc.forEach(function(x){ var li=data.cons.filter(function(c){return c.name===x.item;})[0]||{}; var part=x.part||li.part||""; if(!part) noPart.push(x.item);
-    rows.push([x.site,x.ticket,x.item,part,"","",x.reason,x.sector,li.tech||"",x.notes.replace(/\s*\u00b7\s*Logged by .*$/,""),set["GC"]||"",set["PICKUP LOCATION"]||"",set["PHONE"]||"","Continuous",fmtDate(x.date),x.qty].map(q).join(",")); });
+    var line=[x.site,x.ticket,x.item,part,"","",x.reason,x.sector,li.tech||"",x.notes.replace(/\s*\u00b7\s*Logged by .*$/,""),set["GC"]||"",set["PICKUP LOCATION"]||"",set["PHONE"]||"","Continuous",fmtDate(x.date),1].map(q).join(",");
+    for(var n=0;n<(+x.qty||1);n++) rows.push(line); });
   var csv=head.join(",")+"\r\n"+rows.join("\r\n")+"\r\n";
   var a=document.createElement("a"), d=new Date(), stamp=d.getFullYear()+"-"+("0"+(d.getMonth()+1)).slice(-2)+"-"+("0"+d.getDate()).slice(-2);
   a.href=URL.createObjectURL(new Blob([csv],{type:"text/csv"})); a.download="CHAT_"+cur+"_"+stamp+".csv"; document.body.appendChild(a); a.click();
