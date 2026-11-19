@@ -1022,14 +1022,16 @@ function exportChat(){
   var set=data.chat.set[cur]||{}, parts=data.chat.parts, open=data[cur].tags.filter(function(t){ return tagState(t)==="open"; }).slice().reverse(), oc=data[cur].cons.filter(function(x){ return !x.ordered; }).slice().reverse();
   var clean=function(v){ return S(v).replace(/[\r\n]+/g," ").replace(/\u00b7/g,"-").replace(/[^\x20-\x7E]/g,""); };
   var q=function(v){ v=clean(v); return /[",]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v; };
-  var head=["SITE ID","INC","MODEL","PART NAME","SERIAL","ASSET TAG","FAIL REASON","SECTOR","TECHNOLOGIES","ALARM NOTES","GC","PICKUP","PHONE","FREQUENCY","DATE","QTY"];
+  var head=["PART NAME","ASSET TAG","SERIAL","DATE","GC","PICKUP","PHONE","INC","FREQUENCY","FAIL REASON","SITE ID","SECTOR","ALARM NOTES","TECHNOLOGIES"];
+  /* one CSV line from named fields, in the order of head */
+  var line=function(o){ return head.map(function(h){ return q(o[h]==null?"":o[h]); }).join(","); };
   var noPart=[], noSec=[];
   var rows=open.map(function(t){ var p=parts[t.model]||{}; if(!p.part) noPart.push(t.model||"?"); if(!t.sector) noSec.push(t.site);
     var notes=t.notes.replace(/\s*\u00b7\s*Typed by hand:.*$/,"").replace(/\s*\u00b7\s*Logged by .*$/,"");
-    return [t.site,t.ticket,t.model,p.part||"",t.badSn,t.asset==="NA"?"":t.asset,t.reason,t.sector,p.tech||"",notes,set["GC"]||"",set["PICKUP LOCATION"]||"",set["PHONE"]||"","Continuous",fmtDate(t.date),1].map(q).join(","); });
+    return line({"SITE ID":t.site,"INC":t.ticket,"PART NAME":p.part||"","SERIAL":t.badSn,"ASSET TAG":t.asset==="NA"?"":t.asset,"FAIL REASON":t.reason,"SECTOR":t.sector,"TECHNOLOGIES":p.tech||"","ALARM NOTES":notes,"GC":set["GC"]||"","PICKUP":set["PICKUP LOCATION"]||"","PHONE":set["PHONE"]||"","FREQUENCY":"Continuous","DATE":fmtDate(t.date)}); });
   oc.forEach(function(x){ var li=data.cons.filter(function(c){return c.name===x.item;})[0]||{}; var part=x.part||li.part||""; if(!part) noPart.push(x.item);
-    var line=[x.site,x.ticket,x.item,part,"","",x.reason,x.sector,li.tech||"",x.notes.replace(/\s*\u00b7\s*Logged by .*$/,""),set["GC"]||"",set["PICKUP LOCATION"]||"",set["PHONE"]||"","Continuous",fmtDate(x.date),1].map(q).join(",");
-    for(var n=0;n<(+x.qty||1);n++) rows.push(line); });
+    var one=line({"SITE ID":x.site,"INC":x.ticket,"PART NAME":part,"FAIL REASON":x.reason,"SECTOR":x.sector,"TECHNOLOGIES":li.tech||"","ALARM NOTES":x.notes.replace(/\s*\u00b7\s*Logged by .*$/,""),"GC":set["GC"]||"","PICKUP":set["PICKUP LOCATION"]||"","PHONE":set["PHONE"]||"","FREQUENCY":"Continuous","DATE":fmtDate(x.date)});
+    for(var n=0;n<(+x.qty||1);n++) rows.push(one); });
   var csv=head.join(",")+"\r\n"+rows.join("\r\n")+"\r\n";
   var a=document.createElement("a"), d=new Date(), stamp=d.getFullYear()+"-"+("0"+(d.getMonth()+1)).slice(-2)+"-"+("0"+d.getDate()).slice(-2);
   a.href=URL.createObjectURL(new Blob([csv],{type:"text/csv"})); a.download="CHAT_"+cur+"_"+stamp+".csv"; document.body.appendChild(a); a.click();

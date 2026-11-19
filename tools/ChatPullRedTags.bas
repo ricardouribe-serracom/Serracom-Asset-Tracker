@@ -27,6 +27,7 @@ Public Sub PullRedTags()
     Set wsJ = ThisWorkbook.Worksheets("Justification")
 
     Dim added As Long, skipped As String, noPart As String, v As Variant, r As Long, rj As Long
+    Dim seen As Object: Set seen = CreateObject("Scripting.Dictionary")
     Application.EnableEvents = False
     Application.ScreenUpdating = False
     On Error GoTo Done
@@ -36,11 +37,15 @@ Public Sub PullRedTags()
             Dim sn As String: sn = Col(v, hdr, "SERIAL")
             If sn = "" Then
                 ' Consumable (jumper, fiber, SFP): no serial, one form line per unit used
-                Dim qty As Long, have As Long, k As Long
+                Dim qty As Long, have As Long, k As Long, key As String
+                If Col(v, hdr, "PART NAME") = "" Then noPart = noPart & vbCrLf & "  consumable on " & Col(v, hdr, "INC") & " at " & Col(v, hdr, "SITE ID"): GoTo NextLine
+                ' One CSV row per unit: count the matching rows seen so far (older files may still carry a QTY column)
+                key = Col(v, hdr, "PART NAME") & "|" & Col(v, hdr, "INC") & "|" & Col(v, hdr, "SITE ID")
                 qty = Val(Col(v, hdr, "QTY")): If qty < 1 Then qty = 1
-                If Col(v, hdr, "PART NAME") = "" Then noPart = noPart & vbCrLf & "  " & Col(v, hdr, "MODEL") & " at " & Col(v, hdr, "SITE ID"): GoTo NextLine
+                seen(key) = seen(key) + qty
+                qty = seen(key)
                 have = LinesOnForm(wsO, Col(v, hdr, "PART NAME"), Col(v, hdr, "INC"), Col(v, hdr, "SITE ID"))
-                If have >= qty Then skipped = skipped & vbCrLf & "  " & Col(v, hdr, "MODEL") & " at " & Col(v, hdr, "SITE ID") & " (already on the form)": GoTo NextLine
+                If have >= qty Then skipped = skipped & vbCrLf & "  " & Col(v, hdr, "PART NAME") & " at " & Col(v, hdr, "SITE ID") & " (already on the form)": GoTo NextLine
                 For k = have + 1 To qty
                     r = NextOrderRow(wsO)
                     FillOrderLine wsO, r, v, hdr, "N/A"
@@ -52,7 +57,7 @@ Public Sub PullRedTags()
                 GoTo NextLine
             End If
             If SerialOnForm(wsO, sn) Then skipped = skipped & vbCrLf & "  " & sn & " (already on the form)": GoTo NextLine
-            If Col(v, hdr, "PART NAME") = "" Then noPart = noPart & vbCrLf & "  " & sn & " (" & Col(v, hdr, "MODEL") & ")"
+            If Col(v, hdr, "PART NAME") = "" Then noPart = noPart & vbCrLf & "  " & sn & " at " & Col(v, hdr, "SITE ID")
 
             ' ---- Order form + Justification ----
             r = NextOrderRow(wsO)
