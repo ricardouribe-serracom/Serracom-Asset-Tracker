@@ -187,6 +187,7 @@ form textarea{min-height:64px;resize:vertical}
 .check{display:flex !important;grid-template-columns:none;align-items:center;gap:8px;font-weight:400 !important}
 .check input{width:18px;height:18px}
 .photos{display:flex;gap:10px;flex-wrap:wrap}
+.xph{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}.xp{position:relative}.xp button{position:absolute;top:-6px;right:-6px;width:24px;height:24px;border-radius:50%;border:0;background:var(--bad);color:#fff;font-weight:700;line-height:24px;padding:0;cursor:pointer}
 .photos label{display:grid;gap:6px;justify-items:start}
 .thumb{width:72px;height:72px;object-fit:cover;border-radius:8px;background:var(--chip)}
 .formerr{background:var(--crit-soft);color:var(--crit);border-radius:8px;padding:10px 12px;font-size:14px}
@@ -476,7 +477,7 @@ function buildMarket(m,t){
     var g=t.tags[0].map(H);
     var k={ts:hidx(g,["TIMESTAMP"]),md:hidx(g,["RADIO"]),site:hidx(g,["SITE ID"]),inc:hidx(g,["INC #","INC # / TT NUMBER"]),bad:hidx(g,["SERIAL NUMBER OR ASSET IF NO SN","SERIAL NUMBER"]),rs:hidx(g,["FAILURE REASON"]),st:hidx(g,["STATUS"]),
       p1:hidx(g,["SERIAL NUMBER PICTURE OR ASSET IF NO SN","SERIAL NUMBER PICTURE"]),p3:hidx(g,["ASSET NUMBER PICTURE"]),by:hidx(g,["EMAIL ADDRESS"]),nw:hidx(g,["NEW RADIO SN INSTALLED"]),p2:hidx(g,["NEW RADIO SN INSTALLED PICTURE"]),
-      nt:g.findIndex(function(x){return x.indexOf("ALARM NOTES")===0;}), as:hidx(g,["ASSET NUMBER"]), sec:hidx(g,["SECTOR"]), grp:hidx(g,["GROUP ID"])};
+      nt:g.findIndex(function(x){return x.indexOf("ALARM NOTES")===0;}), as:hidx(g,["ASSET NUMBER"]), sec:hidx(g,["SECTOR"]), grp:hidx(g,["GROUP ID"]),ex:hidx(g,["EXTRA PHOTOS"])};
     var bad=t.bad||[], bh=(bad[0]||[]).map(H), bsn=hidx(bh,["SERIAL NUMBER"]), box=hidx(bh,["CHAT ORDER SUBMITTED?"]), bon=hidx(bh,["ORDERED ON"]), brc=hidx(bh,["REPLACEMENT RECEIVED"]), brs=hidx(bh,["RECEIVED SN"]);
     var used={};
     res.tags=t.tags.slice(1).map(function(x,i){
@@ -489,6 +490,7 @@ function buildMarket(m,t){
       var orderedOn=br&&bon>=0?toDate(br[bon]):null, received=br&&brc>=0?toDate(br[brc]):null, receivedSn=br&&brs>=0?SN(br[brs]):"";
       var inc=S(x[k.inc]).toUpperCase().replace(/_+$/,"");
       var photos=[[x[k.p1],"Pulled radio"],[x[k.p2],"New radio"],[x[k.p3],"Asset tag"]].filter(function(p){return /^https:\/\//.test(S(p[0]));}).map(function(p){return {url:S(p[0]),label:p[1]};});
+      if(k.ex>=0) S(x[k.ex]).split(/\s+/).filter(function(u){return /^https:\/\//.test(u);}).forEach(function(u,n){ photos.push({url:u,label:"Extra "+(n+1)}); });
       return {row:row,date:d,siteRaw:site,site:normSite(site,m),model:H(x[k.md]),ticket:/^\d+$/.test(inc)?"INC"+inc:inc,badSn:b,reason:S(x[k.rs]),notes:k.nt>=0?S(x[k.nt]):"",
         by:nameOf(x[k.by]),newSn:SN(x[k.nw]),asset:k.as>=0?SN(x[k.as]):"",sector:k.sec>=0?H(x[k.sec]):"",group:k.grp>=0?S(x[k.grp]):"",photos:photos,ordered:ordered,orderedOn:orderedOn,received:received,receivedSn:receivedSn};
     }).filter(Boolean).sort(function(a,b){return b.date-a.date;});
@@ -689,7 +691,9 @@ function save(fn,args,label){
   return call(fn,args,id).catch(function(e){
     if(!isNetErr(e)) throw e;
     var a=outbox(); a.push({id:id,fn:fn,args:args,label:label,at:Date.now()});
-    if(!setOutbox(a)) throw e;
+    if(!setOutbox(a)){ var f=args[1]; if(!(f&&f.extra&&f.extra.length)) throw e;
+      f.notes=(f.notes||"")+" · "+f.extra.length+" extra photo"+(f.extra.length>1?"s":"")+" not saved (no signal, phone storage full)"; f.extra=[];
+      a[a.length-1].args=args; if(!setOutbox(a)) throw e; }
     paintOutbox(); return {queued:true};
   });
 }
@@ -1582,7 +1586,7 @@ function startLive(kind,cb){
 var photos={};
 /* Red tag (asseted parts): site and ticket once, then one block per pulled part. Each part saves as its own row,
    tied together by a GROUP ID so the list shows one card per site. */
-var partCount=0;
+var partCount=0, extras={};
 function partHtml(i){
   return '<fieldset class="part" data-i="'+i+'" data-kind="asset">'+partLegend(i,"asset")+'<div class="f2">'+
     scanField("lBad_"+i,"Bad Radio SN","serial",false)+
@@ -1592,14 +1596,15 @@ function partHtml(i){
     '<label>Sector<select id="lSector_'+i+'"><option value="">Choose sector</option>'+SECTORS.map(function(x){return '<option value="'+x+'">'+title(x)+'</option>';}).join("")+'</select><span class="hint"></span></label>'+
     '</div><label class="check"><input id="lBox_'+i+'" type="checkbox"> Bad out of the box (new part failed on install)</label>'+
     '<label>Alarm notes (required)<textarea id="lNotes_'+i+'" placeholder="TX out of order on ports 3 & 4, water intrusion, VSWR…"></textarea></label>'+
-    '<div class="photos"><label>Pulled part serial tag<input id="ph_'+i+'" type="file" accept="image/*" hidden><span class="btn quiet sm" role="button" tabindex="0" data-for="ph_'+i+'" id="ph_'+i+'b">Add photo</span><img class="thumb" id="ph_'+i+'p" alt="Pulled part label photo" hidden><span class="hint" id="ph_'+i+'h"></span></label></div></fieldset>';
+    '<div class="photos"><label>Pulled part serial tag<input id="ph_'+i+'" type="file" accept="image/*" hidden><span class="btn quiet sm" role="button" tabindex="0" data-for="ph_'+i+'" id="ph_'+i+'b">Add photo</span><img class="thumb" id="ph_'+i+'p" alt="Pulled part label photo" hidden><span class="hint" id="ph_'+i+'h"></span></label></div>'+
+    '<div class="xph" id="xph_'+i+'"></div><input id="xin_'+i+'" type="file" accept="image/*" multiple hidden><button class="btn quiet sm" type="button" id="xbtn_'+i+'">+ Add extra photos</button><span class="hint" id="xh_'+i+'">Optional: damage, water, LEDs, alarms. Up to 6.</span></fieldset>';
 }
 function partLegend(i,kind){
   return '<legend>Part '+i+(i===1?'<span class="ksw" role="group" aria-label="Part type"><button type="button" data-kind="asset" aria-pressed="'+(kind==="asset")+'">Asseted</button><button type="button" data-kind="cons" aria-pressed="'+(kind==="cons")+'">Consumable</button></span>'
     :' · '+(kind==="asset"?'Asseted':'Consumable')+'<button type="button" data-rm="'+i+'">Remove</button>')+'</legend>';
 }
 function logFormHtml(){
-  partCount=0; photos={};
+  partCount=0; photos={}; extras={};
   return '<section><div class="sec-h"><h2>Bad radio red tag</h2><p>'+(viewMember()?'Adds the red tag as you, for '+esc(viewMember().name):'Adds the red tag to the sheet as '+esc(user?user.name:"you"))+'</p></div><form id="logForm" novalidate>'+
     '<div id="logErr" class="formerr" hidden></div>'+
     '<div class="f2">'+siteField("lSite")+
@@ -1611,7 +1616,7 @@ function logFormHtml(){
 function addPart(kind,replace){
   var i=replace?+replace.dataset.i:++partCount, box=document.getElementById("parts"), $=function(id){return document.getElementById(id);};
   var html=kind==="cons"?consLineHtml(i,consOptions("")):partHtml(i);
-  if(replace){ delete photos["ph_"+i]; delete photos["c"+i]; delete scanHooks["lBad_"+i]; replace.insertAdjacentHTML("afterend",html); replace.remove(); }
+  if(replace){ delete extras[i]; delete photos["ph_"+i]; delete photos["c"+i]; delete scanHooks["lBad_"+i]; replace.insertAdjacentHTML("afterend",html); replace.remove(); }
   else box.insertAdjacentHTML("beforeend",html);
   var fs=box.querySelector('.part[data-i="'+i+'"]');
   if(kind==="cons"){
@@ -1626,8 +1631,15 @@ function addPart(kind,replace){
     var pb=$("ph_"+i+"b"), open=function(e){ e.preventDefault(); $("ph_"+i).click(); };
     pb.addEventListener("click",open); pb.addEventListener("keydown",function(e){ if(e.key==="Enter"||e.key===" ") open(e); });
     $("ph_"+i).addEventListener("change",function(){ var f=$("ph_"+i).files[0]; if(!f) return; shrink(f).then(function(d){ setPhoto(d,false); }).catch(function(){ toast("That photo couldn't be read. Try another."); }); });
+    extras[i]=[];
+    var drawX=function(){ $("xph_"+i).innerHTML=extras[i].map(function(d,n){ return '<span class="xp"><img class="thumb" src="data:image/jpeg;base64,'+d+'" alt="Extra photo '+(n+1)+'"><button type="button" data-x="'+n+'" aria-label="Remove extra photo '+(n+1)+'">×</button></span>'; }).join("");
+      $("xbtn_"+i).hidden=extras[i].length>=6; $("xh_"+i).textContent=extras[i].length?extras[i].length+" extra photo"+(extras[i].length>1?"s":"")+(extras[i].length>=6?" (max)":""):"Optional: damage, water, LEDs, alarms. Up to 6."; };
+    $("xbtn_"+i).onclick=function(){ $("xin_"+i).click(); };
+    $("xph_"+i).onclick=function(e){ var x=e.target.closest("[data-x]"); if(!x) return; extras[i].splice(+x.dataset.x,1); drawX(); };
+    $("xin_"+i).addEventListener("change",function(){ var fl=[].slice.call($("xin_"+i).files).slice(0,6-extras[i].length); $("xin_"+i).value="";
+      fl.reduce(function(pr,f){ return pr.then(function(){ return shrink(f).then(function(d){ extras[i].push(d); }).catch(function(){ toast("A photo couldn't be read. Try another."); }); }); },Promise.resolve()).then(drawX); });
   }
-  var rm=fs.querySelector("[data-rm]"); if(rm) rm.onclick=function(){ delete photos["ph_"+i]; delete photos["c"+i]; fs.remove(); };
+  var rm=fs.querySelector("[data-rm]"); if(rm) rm.onclick=function(){ delete photos["ph_"+i]; delete photos["c"+i]; delete extras[i]; fs.remove(); };
   [].forEach.call(fs.querySelectorAll(".ksw button"),function(b){ b.onclick=function(){ if(b.dataset.kind!==fs.dataset.kind) addPart(b.dataset.kind,fs); }; });
   if(i>1&&!replace) fs.scrollIntoView({behavior:"smooth",block:"start"});
 }
@@ -1667,7 +1679,8 @@ function wireLogForm(){
       if(typed.length) notes=notes+" · Typed by hand: "+typed.join(", ");
       var rsn=box?reason+" / BAD OUT THE BOX":reason;
       calls.push({fn:"submitRedTag",label:"Red tag "+site+" · "+bf.value,line:model+" "+bf.value+" · "+rsn,
-        f:{model:model,badSn:bf.value,reason:rsn,notes:notes,asset:af.value,box:box,sector:sector,photoBad:photos["ph_"+i]?{data:photos["ph_"+i],mime:"image/jpeg"}:null}});
+        f:{model:model,badSn:bf.value,reason:rsn,notes:notes,asset:af.value,box:box,sector:sector,photoBad:photos["ph_"+i]?{data:photos["ph_"+i],mime:"image/jpeg"}:null,
+          extra:(extras[i]||[]).map(function(d){return {data:d,mime:"image/jpeg"};})}});
     }
     if(!calls.length) return show("Add at least one part.");
     var btn=$("logBtn"); btn.disabled=true; err.hidden=true;

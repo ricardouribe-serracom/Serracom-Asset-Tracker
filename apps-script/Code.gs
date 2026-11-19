@@ -259,11 +259,13 @@ function submitRedTag(token, f) {
     if (!String(f[k] || '').trim()) throw new Error('MISSING:' + k);
   });
   var photoBad = f.photoBad ? savePhoto_(f.photoBad, f.site + ' ' + f.badSn + ' pulled') : '';
+  var extra = (f.extra || []).slice(0, 6).map(function (p, n) { return savePhoto_(p, f.site + ' ' + f.badSn + ' extra ' + (n + 1)); }).filter(String).join(' ');
   var lock = LockService.getScriptLock();
   lock.waitLock(20000);
   try {
     var sh = ss.getSheetByName(c.tags);
     if (!sh) throw new Error('NO_TAB:' + c.tags);
+    if (extra) ensureCol_(sh, 'EXTRA PHOTOS');
     if (f.group) ensureCol_(sh, 'GROUP ID');
     if (f.sector) ensureCol_(sh, 'SECTOR');
     var h = headers_(sh), row = blankRow_(h.length);
@@ -281,6 +283,7 @@ function submitRedTag(token, f) {
     put(['SERIAL NUMBER PICTURE OR ASSET IF NO SN', 'SERIAL NUMBER PICTURE'], photoBad);
     put(['EMAIL ADDRESS'], user.email);
     put(['GROUP ID'], f.group || '');
+    put(['EXTRA PHOTOS'], extra);
     if (notesCol >= 0) row[notesCol] = f.notes || '';
     var r = nextRow_(sh, 1);
     sh.getRange(r, 1, 1, row.length).setValues([row]);
