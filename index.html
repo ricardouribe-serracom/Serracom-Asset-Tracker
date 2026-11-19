@@ -438,6 +438,7 @@ function build(r){
   if(r.settings&&r.settings.length>1){ var sh=r.settings[0].map(H), mi=hidx(sh,["MODEL"]), am=hidx(sh,["AU RESTING STOCK","AU MIN SPARES"]), hm=hidx(sh,["HN RESTING STOCK","HN MIN SPARES"]);
     out.targets={AU:{total:0,models:{}},HN:{total:0,models:{}}};
     r.settings.slice(1).forEach(function(x){ var md=H(x[mi]); if(!md) return; [["AU",am],["HN",hm]].forEach(function(p){ var n=parseInt(x[p[1]],10); if(isNaN(n)) return; if(/^ALL MODELS/.test(md)) out.targets[p[0]].total=n; else out.targets[p[0]].models[md]=n; }); }); }
+  out.extraPhotos=!!r.extraPhotos;
   out.cons=[];
   if(r.consList&&r.consList.length>1){ var ch2=r.consList[0].map(H), cn2=hidx(ch2,["NAME"]), cc2=hidx(ch2,["CATEGORY"]), cp2=hidx(ch2,["PART NAME"]), ct2=hidx(ch2,["TECHNOLOGIES"]), ca2=hidx(ch2,["AU RESTING STOCK"]), ch3=hidx(ch2,["HN RESTING STOCK"]);
     r.consList.slice(1).forEach(function(x){ var n=S(x[cn2]); if(n) out.cons.push({name:n,cat:S(x[cc2])||"Other",part:S(x[cp2]),tech:ct2>=0?S(x[ct2]):"",au:ca2>=0?x[ca2]:"",hn:ch3>=0?x[ch3]:""}); }); }
@@ -1597,7 +1598,7 @@ function partHtml(i){
     '</div><label class="check"><input id="lBox_'+i+'" type="checkbox"> Bad out of the box (new part failed on install)</label>'+
     '<label>Alarm notes (required)<textarea id="lNotes_'+i+'" placeholder="TX out of order on ports 3 & 4, water intrusion, VSWR…"></textarea></label>'+
     '<div class="photos"><label>Pulled part serial tag<input id="ph_'+i+'" type="file" accept="image/*" hidden><span class="btn quiet sm" role="button" tabindex="0" data-for="ph_'+i+'" id="ph_'+i+'b">Add photo</span><img class="thumb" id="ph_'+i+'p" alt="Pulled part label photo" hidden><span class="hint" id="ph_'+i+'h"></span></label></div>'+
-    '<div class="xph" id="xph_'+i+'"></div><input id="xin_'+i+'" type="file" accept="image/*" multiple hidden><button class="btn quiet sm" type="button" id="xbtn_'+i+'">+ Add extra photos</button><span class="hint" id="xh_'+i+'">Optional: damage, water, LEDs, alarms. Up to 6.</span></fieldset>';
+    '<div class="xph" id="xph_'+i+'"></div><input id="xin_'+i+'" type="file" accept="image/*" multiple hidden><button class="btn quiet sm" type="button" id="xbtn_'+i+'"'+(data.extraPhotos?'':' hidden')+'>+ Add extra photos</button><span class="hint" id="xh_'+i+'"'+(data.extraPhotos?'':' hidden')+'>Optional: damage, water, LEDs, alarms. Up to 6.</span></fieldset>';
 }
 function partLegend(i,kind){
   return '<legend>Part '+i+(i===1?'<span class="ksw" role="group" aria-label="Part type"><button type="button" data-kind="asset" aria-pressed="'+(kind==="asset")+'">Asseted</button><button type="button" data-kind="cons" aria-pressed="'+(kind==="cons")+'">Consumable</button></span>'
@@ -1633,7 +1634,7 @@ function addPart(kind,replace){
     $("ph_"+i).addEventListener("change",function(){ var f=$("ph_"+i).files[0]; if(!f) return; shrink(f).then(function(d){ setPhoto(d,false); }).catch(function(){ toast("That photo couldn't be read. Try another."); }); });
     extras[i]=[];
     var drawX=function(){ $("xph_"+i).innerHTML=extras[i].map(function(d,n){ return '<span class="xp"><img class="thumb" src="data:image/jpeg;base64,'+d+'" alt="Extra photo '+(n+1)+'"><button type="button" data-x="'+n+'" aria-label="Remove extra photo '+(n+1)+'">×</button></span>'; }).join("");
-      $("xbtn_"+i).hidden=extras[i].length>=6; $("xh_"+i).textContent=extras[i].length?extras[i].length+" extra photo"+(extras[i].length>1?"s":"")+(extras[i].length>=6?" (max)":""):"Optional: damage, water, LEDs, alarms. Up to 6."; };
+      $("xbtn_"+i).hidden=!data.extraPhotos||extras[i].length>=6; $("xh_"+i).textContent=extras[i].length?extras[i].length+" extra photo"+(extras[i].length>1?"s":"")+(extras[i].length>=6?" (max)":""):"Optional: damage, water, LEDs, alarms. Up to 6."; };
     $("xbtn_"+i).onclick=function(){ $("xin_"+i).click(); };
     $("xph_"+i).onclick=function(e){ var x=e.target.closest("[data-x]"); if(!x) return; extras[i].splice(+x.dataset.x,1); drawX(); };
     $("xin_"+i).addEventListener("change",function(){ var fl=[].slice.call($("xin_"+i).files).slice(0,6-extras[i].length); $("xin_"+i).value="";

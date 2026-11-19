@@ -26,7 +26,7 @@ var PHOTO_FOLDER = 'Serracom Inventory Tracker Photos';
 var INV_HEADERS = ['STATUS', 'RADIO', 'NOTES', 'LOCATION', 'SERIAL NUMBER', 'SCANNED SN', 'ASSET NUMBER', 'SCANNED ASSET', 'DATE OF SCAN', 'PRODUCT CODE', 'LAST MOVED BY', 'LAST MOVED'];
 var MOVE_HEADERS = ['Timestamp', 'Transfer Location', 'Serial Number', 'Serial Number Picture', 'Asset Number', 'Asset Number Picture', 'Notes', 'Site ID if Installed', 'Radio Name', 'RADIO', 'MOVED BY'];
 var SESSION_DAYS = 120;
-var APP_VERSION = '2026-11-09';
+var APP_VERSION = '2026-11-19';
 var SETTINGS_TAB = 'Settings';
 var SITES_TAB = 'Sites';
 var SITE_AREAS = { AU: 'Austin', CC: 'Corpus', SA: 'San Antonio', TK: 'Waco', WA: 'Waco', DA: 'Dallas' };
@@ -194,7 +194,7 @@ function getData(token, sitesKey) {
   addNewModels_(ss);
   migrateAntennas_(ss);
   var out = { user: user, team: readTeam_(ss).map(function (m) { return { email: m.email, name: m.name, truck: m.truck, market: m.market, role: m.role }; }),
-    lookup: readTab_(ss, 'Lookup'), consList: readTab_(ss, CONS_LIST_TAB), chatParts: readTab_(ss, CHAT_PARTS_TAB), chatSettings: readTab_(ss, CHAT_SETTINGS_TAB), settings: readTab_(ss, SETTINGS_TAB), sites: sitesKey && sitesKey === sk ? null : readTab_(ss, SITES_TAB), sitesKey: sk, markets: {}, locations: {}, models: [], tz: ss.getSpreadsheetTimeZone(), book: ss.getName() };
+    lookup: readTab_(ss, 'Lookup'), consList: readTab_(ss, CONS_LIST_TAB), extraPhotos: true, chatParts: readTab_(ss, CHAT_PARTS_TAB), chatSettings: readTab_(ss, CHAT_SETTINGS_TAB), settings: readTab_(ss, SETTINGS_TAB), sites: sitesKey && sitesKey === sk ? null : readTab_(ss, SITES_TAB), sitesKey: sk, markets: {}, locations: {}, models: [], tz: ss.getSpreadsheetTimeZone(), book: ss.getName() };
   Object.keys(MARKETS).forEach(function (m) {
     var c = MARKETS[m];
     out.markets[m] = { tags: readTab_(ss, c.tags), bad: readTab_(ss, c.bad), inv: readTab_(ss, c.inv), cons: readTab_(ss, c.cons), stock: readTab_(ss, c.stock) };
