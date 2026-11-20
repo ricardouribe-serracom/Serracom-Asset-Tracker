@@ -741,11 +741,22 @@ function siteMatches(raw){
   siteList(cur).forEach(function(s){ if(s.id.indexOf(q)===0||s.id.indexOf(n)===0) out.push(s); });
   return out;
 }
+var CITY={AU:"Austin",HN:"Houston"};
+/** A site that's on the OTHER market's list (exact, or the only one starting with what was typed). */
+function otherMarketSite(raw){
+  var q=S(raw).toUpperCase().replace(/\s+/g,""); if(q.length<4) return null;
+  var o=cur==="AU"?"HN":"AU", n=normSite(q,o), l=siteList(o);
+  var hit=l.filter(function(s){ return s.id===n||s.id===q; })[0]; if(hit) return {id:hit.id,m:o};
+  var m=l.filter(function(s){ return s.id.indexOf(q)===0||s.id.indexOf(n)===0; });
+  return m.length===1&&q.length>=5?{id:m[0].id,m:o}:null;
+}
+function wrongMarketMsg(w){ return w.id+" is "+(w.m==="HN"?"a Houston":"an Austin")+" site. Switch to "+w.m+" at the top, then try again."; }
 /** What gets saved: an exact site, the only site that starts with what was typed, or a new site. */
 function resolveSite(raw){
   var n=normSite(raw,cur); if(!n) return {site:""};
   if(siteList(cur).some(function(s){ return s.id===n; })) return {site:n};
   var m=siteMatches(raw);
+  if(!m.length){ var w=otherMarketSite(raw); if(w) return {site:"",error:wrongMarketMsg(w)}; }
   if(m.length===1) return {site:m[0].id};
   if(m.length>1) return {site:"",error:"More than one site starts with "+n+" ("+m.slice(0,4).map(function(s){return s.id;}).join(", ")+(m.length>4?"…":"")+"). Tap the right one."};
   return {site:n,isNew:true};
@@ -766,6 +777,7 @@ function wireSite(id){
       return;
     }
     close();
+    var w=otherMarketSite(raw); if(w){ h.className="hint err"; h.textContent=wrongMarketMsg(w); return; }
     if(raw.length<3){ h.className="hint"; h.textContent=""; return; }
     h.className="hint"; h.textContent=(n!==raw?"Saved as "+n+". ":"")+(n.length>=7?"Not on the site list. It'll be added as a new site.":"No site starts with that.");
   };
