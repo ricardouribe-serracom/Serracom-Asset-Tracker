@@ -442,6 +442,10 @@ function build(r){
   out.cons=[];
   if(r.consList&&r.consList.length>1){ var ch2=r.consList[0].map(H), cn2=hidx(ch2,["NAME"]), cc2=hidx(ch2,["CATEGORY"]), cp2=hidx(ch2,["PART NAME"]), ct2=hidx(ch2,["TECHNOLOGIES"]), ca2=hidx(ch2,["AU RESTING STOCK"]), ch3=hidx(ch2,["HN RESTING STOCK"]);
     r.consList.slice(1).forEach(function(x){ var n=S(x[cn2]); if(n) out.cons.push({name:n,cat:S(x[cc2])||"Other",part:S(x[cp2]),tech:ct2>=0?S(x[ct2]):"",au:ca2>=0?x[ca2]:"",hn:ch3>=0?x[ch3]:""}); }); }
+  /* AOSD is counted (not scanned) once the back end puts it on the consumables list */
+  var aosdC=out.cons.some(function(c){ return c.name.toUpperCase()==="AOSD"; });
+  CONS_MODELS=aosdC?["FFVV","HBXX","AOSD"]:["FFVV","HBXX"];
+  if(!aosdC&&STOCK_ORDER.indexOf("AOSD")<0) STOCK_ORDER.push("AOSD"); if(aosdC&&STOCK_ORDER.indexOf("AOSD")>=0) STOCK_ORDER.splice(STOCK_ORDER.indexOf("AOSD"),1);
   out.sites={AU:[],HN:[]};
   if(r.sites&&r.sites.length>1){ var sh2=r.sites[0].map(H), si=hidx(sh2,["SITE ID"]), sm=hidx(sh2,["MARKET"]), sa=hidx(sh2,["AREA"]), seen={};
     r.sites.slice(1).forEach(function(x){ var id=SN(x[si]); if(!id||seen[id]) return; var m=H(x[sm]); if(!MARKETS[m]) m=/^[A-Z]{2}\d/.test(id)?"AU":"HN"; id=normSite(id,m); seen[id]=1;
@@ -847,7 +851,7 @@ function viewInventory(){
     if(!v) return bad("Scan the radio's serial number."); if(sf.error) return bad(sf.error); if(af.error) return bad(af.error);
     if(!/^[A-Z0-9]{6,20}$/.test(v)) return bad("Serials use only letters and numbers.");
     var hit=findRadio(v);
-    if((hit?hit.r.model:m)==="AOSD") return bad("AOSD is counted now, not scanned. Tap Consumables at the top of Inventory and pick AOSD.");
+    if((hit?hit.r.model:m)==="AOSD"&&CONS_MODELS.indexOf("AOSD")>=0) return bad("AOSD is counted now, not scanned. Tap Consumables at the top of Inventory and pick AOSD.");
     if(hit&&hit.m!==cur) return bad(v+" is listed in "+hit.m+" inventory. Switch to "+hit.m+" at the top to move it.");
     if(hit&&hit.r.loc===destName) return bad(v+" is already at "+title(destName)+".");
     if(!hit&&!m) return bad("Choose the radio model.");
@@ -964,7 +968,7 @@ function viewInstall(){
     if(rs.error) return show(rs.error);
     if(!site) return show("Add the site ID.");
     var hit=findRadio(sn), d={as:asWho(),sn:sn,site:site,typed:typedList([[sf,"serial"],[af,"asset tag"]])};
-    if((hit?hit.r.model:$("inModel").value)==="AOSD") return show("No need to install AOSDs here. The AOSD red tag takes 1 off your truck and installs it at the site.");
+    if((hit?hit.r.model:$("inModel").value)==="AOSD"&&CONS_MODELS.indexOf("AOSD")>=0) return show("No need to install AOSDs here. The AOSD red tag takes 1 off your truck and installs it at the site.");
     if(hit){
       if(hit.m!==cur) return show(sn+" is listed in "+hit.m+" inventory. Switch to "+hit.m+" at the top.");
       if(hit.r.loc==="SITE") return show(sn+" is already installed"+(hit.r.site?" at "+hit.r.site:"")+".");
