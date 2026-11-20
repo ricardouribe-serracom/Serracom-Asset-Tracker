@@ -26,7 +26,7 @@ var PHOTO_FOLDER = 'Serracom Inventory Tracker Photos';
 var INV_HEADERS = ['STATUS', 'RADIO', 'NOTES', 'LOCATION', 'SERIAL NUMBER', 'SCANNED SN', 'ASSET NUMBER', 'SCANNED ASSET', 'DATE OF SCAN', 'PRODUCT CODE', 'LAST MOVED BY', 'LAST MOVED'];
 var MOVE_HEADERS = ['Timestamp', 'Transfer Location', 'Serial Number', 'Serial Number Picture', 'Asset Number', 'Asset Number Picture', 'Notes', 'Site ID if Installed', 'Radio Name', 'RADIO', 'MOVED BY'];
 var SESSION_DAYS = 120;
-var APP_VERSION = '2026-11-19';
+var APP_VERSION = '2026-11-20';
 var SETTINGS_TAB = 'Settings';
 var SITES_TAB = 'Sites';
 var SITE_AREAS = { AU: 'Austin', CC: 'Corpus', SA: 'San Antonio', TK: 'Waco', WA: 'Waco', DA: 'Dallas' };
@@ -241,7 +241,7 @@ function redTagAlert_(ss, user, f, kind) {
     if (f.group && !f.alert) return;
     var to = readTeam_(ss).filter(function (m) { return m.role === 'MANAGER' && !m.noAlerts; }).map(function (m) { return m.email; });
     if (!to.length) return;
-    var lines = (f.alert && f.alert.length ? f.alert : [kind === 'cons' ? f.qty + ' x ' + f.item : (f.model + ' ' + f.badSn)]).map(function (l) { return '  - ' + String(l).slice(0, 120); });
+    var lines = (f.alert && f.alert.length ? f.alert : [(kind === 'cons' ? f.qty + ' x ' + f.item : (f.model + ' ' + f.badSn)) + ' · ' + f.reason + (f.detail ? ' · ' + f.detail : '')]).map(function (l) { return '  - ' + String(l).slice(0, 120); });
     var who = user.forName ? user.name + ' for ' + user.forName : user.name;
     MailApp.sendEmail({
       to: to.join(','),
@@ -266,6 +266,7 @@ function submitRedTag(token, f) {
     var sh = ss.getSheetByName(c.tags);
     if (!sh) throw new Error('NO_TAB:' + c.tags);
     if (extra) ensureCol_(sh, 'EXTRA PHOTOS');
+    if (f.failGroup) { ensureCol_(sh, 'FAILURE GROUP'); ensureCol_(sh, 'REQUIRED DETAIL'); }
     if (f.group) ensureCol_(sh, 'GROUP ID');
     if (f.sector) ensureCol_(sh, 'SECTOR');
     var h = headers_(sh), row = blankRow_(h.length);
@@ -283,7 +284,7 @@ function submitRedTag(token, f) {
     put(['SERIAL NUMBER PICTURE OR ASSET IF NO SN', 'SERIAL NUMBER PICTURE'], photoBad);
     put(['EMAIL ADDRESS'], user.email);
     put(['GROUP ID'], f.group || '');
-    put(['EXTRA PHOTOS'], extra);
+    put(['EXTRA PHOTOS'], extra); put(['FAILURE GROUP'], f.failGroup || ''); put(['REQUIRED DETAIL'], f.detail || '');
     if (notesCol >= 0) row[notesCol] = f.notes || '';
     var r = nextRow_(sh, 1);
     sh.getRange(r, 1, 1, row.length).setValues([row]);
@@ -372,12 +373,14 @@ function submitConsumable(token, f) {
     var sh = ss.getSheetByName(c.cons);
     if (!sh) throw new Error('NO_TAB:' + c.cons);
     ensureCol_(sh, 'ENTRY ID'); if (f.group) ensureCol_(sh, 'GROUP ID');
+    if (f.failGroup) { ensureCol_(sh, 'FAILURE GROUP'); ensureCol_(sh, 'REQUIRED DETAIL'); }
     var h = headers_(sh), row = blankRow_(h.length), now = new Date(), entry = Utilities.getUuid().slice(0, 8);
     var put = function (name, value) { var i = findCol_(h, [name]); if (i >= 0) row[i] = value; };
     put('TIMESTAMP', now); put('SITE ID', f.site); put('INC #', f.ticket); put('CATEGORY', f.cat || '');
     put('CONSUMABLE', f.item); put('PART NAME', f.part || ''); put('QTY', 1); put('FAILURE REASON', f.reason);
     put('SECTOR', String(f.sector).toUpperCase()); put('ALARM NOTES', f.notes); put('EMAIL ADDRESS', user.email); put('PHOTO', photo);
     put('ORDER SUBMITTED', false); put('ENTRY ID', entry); put('GROUP ID', f.group || '');
+    put('FAILURE GROUP', f.failGroup || ''); put('REQUIRED DETAIL', f.detail || '');
     // one row per unit used: 3 jumpers = 3 rows, tied together by ENTRY ID
     var rows = []; for (var q = 0; q < qty; q++) rows.push(row.slice());
     var r = nextRow_(sh, 1);
