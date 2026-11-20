@@ -291,6 +291,15 @@ function submitRedTag(token, f) {
     var box = !!f.box || /BAD OUT THE BOX/i.test(String(f.reason));
     addSite_(ss, f.site, f.market, user);
     var inv = pullToInventory_(ss, user, c, { sn: f.badSn, model: f.model, asset: f.asset, site: f.site, status: box ? 'BAD OUT THE BOX' : 'BAD' });
+    if (String(f.model).toUpperCase() === 'AOSD') {
+      var stA = ss.getSheetByName(c.stock);
+      if (stA) {
+        var shA = headers_(stA), mvA = blankRow_(shA.length), putA = function (n, v) { var i = findCol_(shA, [n]); if (i >= 0) mvA[i] = v; };
+        putA('TIMESTAMP', new Date()); putA('CONSUMABLE', 'AOSD'); putA('QTY', 1); putA('FROM', (truckOf_(user) || c.store).toUpperCase()); putA('TO', 'SITE'); putA('ACTION', 'INSTALL');
+        putA('SITE ID', f.site); putA('NOTES', 'Red tag ' + f.ticket + ' (replaces ' + f.badSn + ')'); putA('BY', user.email);
+        stA.getRange(nextRow_(stA, 1), 1, 1, mvA.length).setValues([mvA]);
+      }
+    }
     redTagAlert_(ss, user, f, 'asset');
     return JSON.stringify({ ok: true, row: r, inv: inv });
   } finally {
@@ -979,7 +988,7 @@ function applyResting_(ss) {
  * Adds models and product codes the sheet doesn't have yet (Settings, Lookup, model dropdowns).
  * Runs once by itself after a release that changes MODELS_REV. Never changes numbers already on the Settings tab.
  */
-var MODELS_REV = '5';
+var MODELS_REV = '6';
 /** Consumables: parts ordered on CHAT with no serial (jumpers, fiber, SFPs). Editable on the Consumables List tab. */
 var CONS_LIST_TAB = 'Consumables List';
 var CONS_LIST_HEADERS = ['NAME', 'CATEGORY', 'PART NAME', 'PRODUCT CODE', 'TECHNOLOGIES', 'AU RESTING STOCK', 'HN RESTING STOCK'];
@@ -988,6 +997,7 @@ var CONS_HEADERS = ['TIMESTAMP', 'SITE ID', 'INC #', 'CATEGORY', 'CONSUMABLE', '
 var CONS_LIST_REV = '2';   // bump to rewrite the Consumables List tab (resting stock numbers are kept)
 var CONS_LIST = [
   ['1310 SFP', 'SFPs', '33592 SM 1.4km SFP 1310nm CPRI 9.8G', 'L700, L1900'],
+  ['AOSD', 'SFPs', '34190 AOSD SFP28 10KM SM I-TEMP RS for AEHC', 'L2500, N2500'],
   ["8' 4.3-10 to 4.3-10 RF JUMPER", 'RF Jumpers', '34431 BOOTED JMPR 8ft 4.3-10-4.3-10 REP 33287', ''],
   ["8' DM to 4.3-10 RF JUMPER", 'RF Jumpers', "33292 JUMPER 8' FOAM 4.3-10 TO DM", ''],
   ["15' AHLOA HYBRID 2.0", 'Fiber Jumpers', "33952 15' HCS 2.0 TOP JMP 6AWG AIRSC REP 33758", 'L700, N600'],
@@ -1076,6 +1086,17 @@ function addNewModels_(ss) {
       cl.getRange(1, 1, 1, CONS_LIST_HEADERS.length).setValues([CONS_LIST_HEADERS]).setFontWeight('bold');
       cl.getRange(2, 1, CONS_LIST.length, 7).setValues(CONS_LIST.map(function (x) { var k = keep[x[0].toUpperCase()] || ['', '']; return [x[0], x[1], x[2], '', x[3], k[0], k[1]]; }));
       props.setProperty('CONS_LIST_REV', CONS_LIST_REV);
+    }
+    if (props.getProperty('AOSD_CONS') !== '1' && cl.getLastRow() > 1) {
+      var lh = headers_(cl), ln = findCol_(lh, ['NAME']), names = cl.getRange(2, ln + 1, cl.getLastRow() - 1, 1).getValues().map(function (r) { return String(r[0]).trim().toUpperCase(); });
+      if (names.indexOf('AOSD') < 0) {
+        var after = names.indexOf('1310 SFP'), at = after >= 0 ? after + 2 : cl.getLastRow();
+        cl.insertRowAfter(at);
+        var nr = blankRow_(lh.length), set = function (n, v) { var i = findCol_(lh, [n]); if (i >= 0) nr[i] = v; };
+        set('NAME', 'AOSD'); set('CATEGORY', 'SFPs'); set('PART NAME', '34190 AOSD SFP28 10KM SM I-TEMP RS for AEHC'); set('PRODUCT CODE', 474902); set('TECHNOLOGIES', 'L2500, N2500');
+        cl.getRange(at + 1, 1, 1, nr.length).setValues([nr]);
+      }
+      props.setProperty('AOSD_CONS', '1');
     }
     Object.keys(MARKETS).forEach(function (m) {
       var st2 = ss.getSheetByName(MARKETS[m].stock);

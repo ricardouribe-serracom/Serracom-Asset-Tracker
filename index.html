@@ -321,8 +321,8 @@ var REASONS=["Will Not Power Up","Fault/OSS Alarms will not clear","RF Intermitt
 var SECTORS=["ALPHA","BETA","GAMMA","DELTA","EPSILON","ZETA"];
 var MARKETS={AU:{name:"AU",store:"AU WAREHOUSE",sitePh:"TK02047"},HN:{name:"HN",store:"HN WAREHOUSE",sitePh:"A3H0170A"}};
 var NOT_SPARE=["SITE","TELLWORKS"];
-var CONS_MODELS=["FFVV","HBXX"];   // antennas: counted as consumables, not serialized
-var STOCK_ORDER=["AHLOA","AEHC","AHFIG","AHLOB","AHFII","AAFIA","FXFC","AOSD"];
+var CONS_MODELS=["FFVV","HBXX","AOSD"];   // counted as consumables, not serialized (AOSD: red tags still scan the serial)
+var STOCK_ORDER=["AHLOA","AEHC","AHFIG","AHLOB","AHFII","AAFIA","FXFC"];
 var DEFAULT_MODELS=["AEHC","AAFIA","AHLOA","AHFIG","AHLOB","AHFII","FXFC","FXFB","AVHA","FFVV","HBXX","FRIG","ABIA","ASIA","AHFIB","ASIK","ABIO","AOSD"];
 var store={get:function(k){try{return localStorage.getItem(k);}catch(e){return null;}},set:function(k,v){try{localStorage.setItem(k,v);}catch(e){}}};
 var cur=MARKETS[store.get("rtt-market")]?store.get("rtt-market"):"AU";
@@ -448,7 +448,7 @@ function build(r){
       out.sites[m].push({id:id,area:S(sa>=0?x[sa]:"")||siteArea(id,m)}); });
     Object.keys(out.sites).forEach(function(m){ out.sites[m].sort(function(a,b){ return a.id.localeCompare(b.id); }); }); }
   Object.keys(MARKETS).forEach(function(m){ out[m]=buildMarket(m,r.markets[m]||{});
-    if(out[m].inv) out[m].inv=out[m].inv.filter(function(x){ return CONS_MODELS.indexOf(x.model)<0; }); });
+    if(out[m].inv) out[m].inv=out[m].inv.filter(function(x){ return CONS_MODELS.indexOf(x.model)<0||(x.model==="AOSD"&&x.status!=="GOOD"); }); });
   if(out.targets) ["AU","HN"].forEach(function(m){ CONS_MODELS.forEach(function(md){ delete out.targets[m].models[md]; }); });
   return out;
 }
@@ -847,6 +847,7 @@ function viewInventory(){
     if(!v) return bad("Scan the radio's serial number."); if(sf.error) return bad(sf.error); if(af.error) return bad(af.error);
     if(!/^[A-Z0-9]{6,20}$/.test(v)) return bad("Serials use only letters and numbers.");
     var hit=findRadio(v);
+    if((hit?hit.r.model:m)==="AOSD") return bad("AOSD is counted now, not scanned. Tap Consumables at the top of Inventory and pick AOSD.");
     if(hit&&hit.m!==cur) return bad(v+" is listed in "+hit.m+" inventory. Switch to "+hit.m+" at the top to move it.");
     if(hit&&hit.r.loc===destName) return bad(v+" is already at "+title(destName)+".");
     if(!hit&&!m) return bad("Choose the radio model.");
@@ -963,6 +964,7 @@ function viewInstall(){
     if(rs.error) return show(rs.error);
     if(!site) return show("Add the site ID.");
     var hit=findRadio(sn), d={as:asWho(),sn:sn,site:site,typed:typedList([[sf,"serial"],[af,"asset tag"]])};
+    if((hit?hit.r.model:$("inModel").value)==="AOSD") return show("No need to install AOSDs here. The AOSD red tag takes 1 off your truck and installs it at the site.");
     if(hit){
       if(hit.m!==cur) return show(sn+" is listed in "+hit.m+" inventory. Switch to "+hit.m+" at the top.");
       if(hit.r.loc==="SITE") return show(sn+" is already installed"+(hit.r.site?" at "+hit.r.site:"")+".");
@@ -1622,13 +1624,13 @@ function logFormHtml(){
     '<div id="logErr" class="formerr" hidden></div>'+
     '<div class="f2">'+siteField("lSite")+
       '<label>Ticket (INC #)<input id="lTicket" type="text" class="mono" placeholder="INC130236867" autocomplete="off" autocapitalize="characters"><span class="hint"></span></label></div>'+
-    '<p class="note">Site and ticket once, then a part for each one you pulled. Asseted parts move to '+esc(title(myTruck()||MARKETS[cur].store))+' marked bad. Consumables are installed at the site and taken off '+esc(title(myTruck()||MARKETS[cur].store))+'.</p>'+
+    '<p class="note">Site and ticket once, then a part for each one you pulled. Asseted parts move to '+esc(title(myTruck()||MARKETS[cur].store))+' marked bad. Consumables and the replacement AOSD are installed at the site and taken off '+esc(title(myTruck()||MARKETS[cur].store))+'.</p>'+
     '<div id="parts"></div><div class="addrow"><button class="btn quiet" type="button" id="addAsset">+ Add asseted part</button><button class="btn quiet" type="button" id="addCons">+ Add consumable</button></div>'+
     '<div class="actions"><button class="btn red" type="submit" id="logBtn">Create red tag</button></div></form></section>';
 }
 function addPart(kind,replace){
   var i=replace?+replace.dataset.i:++partCount, box=document.getElementById("parts"), $=function(id){return document.getElementById(id);};
-  var html=kind==="cons"?consLineHtml(i,consOptions("")):partHtml(i);
+  var html=kind==="cons"?consLineHtml(i,consOptions("").replace(/<option value="AOSD"[^>]*>AOSD<\/option>/,"")):partHtml(i);
   if(replace){ delete extras[i]; delete photos["ph_"+i]; delete photos["c"+i]; delete scanHooks["lBad_"+i]; replace.insertAdjacentHTML("afterend",html); replace.remove(); }
   else box.insertAdjacentHTML("beforeend",html);
   var fs=box.querySelector('.part[data-i="'+i+'"]');
