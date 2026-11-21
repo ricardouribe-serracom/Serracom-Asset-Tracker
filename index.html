@@ -746,6 +746,8 @@ function siteMatches(raw){
   return out;
 }
 var CITY={AU:"Austin",HN:"Houston"};
+/* models counted as consumables (AOSD) aren't picked in Inventory or Install */
+function notCounted(m){ return CONS_MODELS.indexOf(m)<0; }
 /** A site that's on the OTHER market's list (exact, or the only one starting with what was typed). */
 function otherMarketSite(raw){
   var q=S(raw).toUpperCase().replace(/\s+/g,""); if(q.length<4) return null;
@@ -804,7 +806,7 @@ function viewInventory(){
   (rc?'<div class="banner info">Scan the new radio that came in. It goes into inventory and the order is marked received. <button class="linkbtn" type="button" id="rcCancel">Cancel</button></div>':'')+
   '<form id="xfForm" novalidate><div class="f2">'+
     scanField("xfSn","Serial number","serial",false)+
-    '<label>Model<select id="xfModel"><option value="">Choose radio</option>'+data.models.map(function(m){return '<option'+(rc&&rc.model===m?' selected':'')+'>'+esc(m)+'</option>';}).join("")+'</select><span class="hint" id="xfModelHint">Filled in from the scan</span></label>'+
+    '<label>Model<select id="xfModel"><option value="">Choose radio</option>'+data.models.filter(notCounted).map(function(m){return '<option'+(rc&&rc.model===m?' selected':'')+'>'+esc(m)+'</option>';}).join("")+'</select><span class="hint" id="xfModelHint">Filled in from the scan</span></label>'+
     '<div>'+scanField("xfAsset","T-Mobile asset tag","asset",true)+'<label class="check sm"><input id="xfNoTag" type="checkbox"> No asset tag on this radio</label></div>'+
     '<fieldset class="dest"><legend>Move it to</legend><div class="seg">'+
       '<label><input type="radio" name="xfDest" value="TRUCK"'+(truck?' checked':' disabled')+'><span>My truck<small>'+(truck?esc(title(truck)):'None on Team tab')+'</small></span></label>'+
@@ -933,10 +935,10 @@ function drawCheck(){
 var instQuery="";
 function viewInstall(){
   app.innerHTML=liveLine()+
-  '<section><div class="sec-h"><h2>Install to site</h2><p>Moves a radio to a site</p></div><form id="inForm" novalidate><div class="f2">'+
+  '<section><div class="sec-h"><h2>INSTALL RADIO TO SITE</h2><p>Moves a radio to a site</p></div><form id="inForm" novalidate><div class="f2">'+
     scanField("inSn","Serial number","serial",false)+
     siteField("inSite")+
-    '<label id="inModelL" hidden>Model<select id="inModel"><option value="">Choose radio</option>'+data.models.map(function(m){return '<option>'+esc(m)+'</option>';}).join("")+'</select><span class="hint">Not in inventory yet, so it\'s added as installed</span></label>'+
+    '<label id="inModelL" hidden>Model<select id="inModel"><option value="">Choose radio</option>'+data.models.filter(notCounted).map(function(m){return '<option>'+esc(m)+'</option>';}).join("")+'</select><span class="hint">Not in inventory yet, so it\'s added as installed</span></label>'+
     '<div id="inAssetW" hidden>'+scanField("inAsset","T-Mobile asset tag","asset",true)+'</div>'+
   '</div><div class="photos"><label>Serial tag photo (required)<input id="inPh" type="file" accept="image/*" capture="environment" hidden><span class="btn quiet sm" role="button" tabindex="0" id="inPhB">Add photo</span><img class="thumb" id="inPhP" alt="Serial tag photo" hidden><span class="hint" id="inPhH">Comes from your scan, or tap to take one</span></label></div>'+
   '<div id="inErr" class="formerr" hidden></div><div class="actions"><button class="btn red" type="submit" id="inBtn">Install</button></div></form></section>'+
