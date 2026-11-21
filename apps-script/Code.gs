@@ -243,11 +243,13 @@ function redTagAlert_(ss, user, f, kind) {
     if (!to.length) return;
     var lines = (f.alert && f.alert.length ? f.alert : [kind === 'cons' ? f.qty + ' x ' + f.item : (f.model + ' ' + f.badSn)]).map(function (l) { return '  - ' + String(l).slice(0, 120); });
     var who = user.forName ? user.name + ' for ' + user.forName : user.name;
+    var shortTxt = f.group ? (CacheService.getScriptCache().get('short_' + f.group) || '') : (f.short || '');
     MailApp.sendEmail({
       to: to.join(','),
       subject: 'Red tag ' + f.market + ' ' + f.site + ' ' + f.ticket + ' (' + lines.length + (lines.length > 1 ? ' parts' : kind === 'cons' ? ' consumable' : ' part') + ')',
       name: 'Serracom Inventory Tracker',
-      body: who + ' made a red tag.\n\nSite: ' + f.site + '\nTicket: ' + f.ticket + '\n\n' + lines.join('\n') + '\n\nOpen the app to mark the order submitted.'
+      body: who + ' made a red tag.\n\nSite: ' + f.site + '\nTicket: ' + f.ticket + '\n\n' + lines.join('\n') +
+        (shortTxt ? '\n\nHeads up, not picked up in the app first:\n  - ' + shortTxt.split('\n').join('\n  - ') : '') + '\n\nOpen the app to mark the order submitted.'
     });
   } catch (e) { console.log('alert failed: ' + e); }
 }
@@ -291,15 +293,8 @@ function submitRedTag(token, f) {
     var box = !!f.box || /BAD OUT THE BOX/i.test(String(f.reason));
     addSite_(ss, f.site, f.market, user);
     var inv = pullToInventory_(ss, user, c, { sn: f.badSn, model: f.model, asset: f.asset, site: f.site, status: box ? 'BAD OUT THE BOX' : 'BAD' });
-    if (String(f.model).toUpperCase() === 'AOSD') {
-      var stA = ss.getSheetByName(c.stock);
-      if (stA) {
-        var shA = headers_(stA), mvA = blankRow_(shA.length), putA = function (n, v) { var i = findCol_(shA, [n]); if (i >= 0) mvA[i] = v; };
-        putA('TIMESTAMP', new Date()); putA('CONSUMABLE', 'AOSD'); putA('QTY', 1); putA('FROM', (truckOf_(user) || c.store).toUpperCase()); putA('TO', 'SITE'); putA('ACTION', 'INSTALL');
-        putA('SITE ID', f.site); putA('NOTES', 'Red tag ' + f.ticket + ' (replaces ' + f.badSn + ')'); putA('BY', user.email);
-        stA.getRange(nextRow_(stA, 1), 1, 1, mvA.length).setValues([mvA]);
-      }
-    }
+    if (String(f.model).toUpperCase() === 'AOSD')
+      f.short = installFromTruck_(ss, c, user, 'AOSD', 1, f.site, 'Red tag ' + f.ticket + ' (replaces ' + f.badSn + ')', '', f.group);
     redTagAlert_(ss, user, f, 'asset');
     return JSON.stringify({ ok: true, row: r, inv: inv });
   } finally {
@@ -366,6 +361,46 @@ function migrateAntennas_(ss) {
 }
 
 /** A consumable used on a swap (jumper, fiber, SFP). No serial; it's ordered on CHAT like a red tag. */
+/** Count of each consumable at one location, from the stock log (a COUNT resets the total). */
+function stockAt_(st, loc) {
+  var h = headers_(st), out = {}, ix = function (n) { return findCol_(h, [n]); };
+  if (st.getLastRow() < 2) return out;
+  loc = String(loc).trim().toUpperCase();
+  st.getRange(2, 1, st.getLastRow() - 1, h.length).getValues().forEach(function (r) {
+    var it = String(r[ix('CONSUMABLE')]).trim().toUpperCase(), q = Number(r[ix('QTY')]) || 0, a = String(r[ix('ACTION')]).toUpperCase();
+    var fr = String(r[ix('FROM')]).trim().toUpperCase(), to = String(r[ix('TO')]).trim().toUpperCase();
+    if (!it) return;
+    if (a === 'COUNT') { if (to === loc) out[it] = q; return; }
+    if (fr === loc) out[it] = (out[it] || 0) - q;
+    if (to === loc) out[it] = (out[it] || 0) + q;
+  });
+  return out;
+}
+/** A red tag put consumables up at a site: take them off the lead's truck; anything the truck doesn't have comes from the shop.
+    Returns how many came from the shop. */
+function installFromTruck_(ss, c, user, item, qty, site, note, entry, group) {
+  var st = ss.getSheetByName(c.stock); if (!st) return 0;
+  var truck = String(truckOf_(user) || '').trim().toUpperCase(), store = String(c.store).toUpperCase();
+  var have = truck ? Math.max(0, stockAt_(st, truck)[String(item).toUpperCase()] || 0) : qty;
+  var fromTruck = Math.min(have, qty), short = qty - fromTruck;
+  var h = headers_(st), rows = [], now = new Date();
+  var add = function (n, from, extra) {
+    var r = blankRow_(h.length), put = function (k, v) { var i = findCol_(h, [k]); if (i >= 0) r[i] = v; };
+    put('TIMESTAMP', now); put('CONSUMABLE', item); put('QTY', n); put('FROM', from); put('TO', 'SITE'); put('ACTION', 'INSTALL');
+    put('SITE ID', site); put('NOTES', note + extra); put('BY', user.email); put('ENTRY ID', entry || '');
+    rows.push(r);
+  };
+  if (fromTruck > 0) add(fromTruck, truck || store, '');
+  if (short > 0) add(short, store, truck ? ' · taken from shop (not picked up in app)' : '');
+  if (rows.length) st.getRange(nextRow_(st, 1), 1, rows.length, h.length).setValues(rows);
+  if (short > 0 && truck) {   // tell the manager in the red tag email
+    var msg = short + ' x ' + item + ' taken from shop (' + (user.forName || user.name) + ' had ' + have + ' on the truck)';
+    if (group) { var ca = CacheService.getScriptCache(), k = 'short_' + group; ca.put(k, ((ca.get(k) || '') + '\n' + msg).trim(), 3600); }
+    return msg;
+  }
+  return '';
+}
+
 function submitConsumable(token, f) {
   var ss = book_(), user = actAs_(ss, who_(ss, token), f.as), c = market_(f.market);
   if (user.forName) f.notes = (f.notes ? f.notes + ' · ' : '') + 'Logged by ' + user.name + ' for ' + user.forName;
@@ -392,16 +427,11 @@ function submitConsumable(token, f) {
     var r = nextRow_(sh, 1);
     sh.getRange(r, 1, qty, row.length).setValues(rows);
     // the replacement went up at the site: install it there and take it off the lead's truck (or the shop) in the same step
-    var from = (truckOf_(user) || c.store).toUpperCase(), st = ss.getSheetByName(c.stock);
-    if (st) {
-      var sh2 = headers_(st), mv = blankRow_(sh2.length), put2 = function (n, v) { var i = findCol_(sh2, [n]); if (i >= 0) mv[i] = v; };
-      put2('TIMESTAMP', now); put2('CONSUMABLE', f.item); put2('QTY', qty); put2('FROM', from); put2('TO', 'SITE'); put2('ACTION', 'INSTALL');
-      put2('SITE ID', f.site); put2('NOTES', 'Red tag ' + f.ticket); put2('BY', user.email); put2('ENTRY ID', entry);
-      st.getRange(nextRow_(st, 1), 1, 1, mv.length).setValues([mv]);
-    }
+    var from = (truckOf_(user) || c.store).toUpperCase();
+    f.short = installFromTruck_(ss, c, user, f.item, qty, f.site, 'Red tag ' + f.ticket, entry, f.group);
     addSite_(ss, f.site, f.market, user);
     redTagAlert_(ss, user, f, 'cons');
-    return JSON.stringify({ ok: true, row: r, installedFrom: from });
+    return JSON.stringify({ ok: true, row: r, installedFrom: from, short: f.short });
   } finally {
     lock.releaseLock();
   }
