@@ -954,7 +954,8 @@ function viewInstall(){
     $("inModelL").hidden=!isNew; $("inAssetW").hidden=!isNew;
     if(!hit){ h.className="hint"; h.textContent="Not in inventory yet. Pick the model below and it'll be added."; }
     else if(hit.m!==cur){ h.className="hint err"; h.textContent="Listed in "+hit.m+" inventory. Switch to "+hit.m+" at the top."; }
-    else if(hit.r.loc==="SITE"){ h.className="hint err"; h.textContent="Already installed"+(hit.r.site?" at "+hit.r.site:"")+"."; }
+    else if(hit.r.loc==="SITE"&&hit.r.site){ h.className="hint err"; h.textContent="Already installed at "+hit.r.site+"."; }
+    else if(hit.r.loc==="SITE"){ h.className="hint"; h.textContent="Marked installed with no site. Add the site and tap Install."; }
     else if(hit.r.status!=="GOOD"){ h.className="hint err"; h.textContent="Marked bad. Pick a good spare."; }
     else { h.className="hint ok"; h.textContent=hit.r.model+" · from "+title(hit.r.loc); } };
   scanHooks.inSn=function(r){ scanRaw=r.raw||""; check(); if(r.model) $("inModel").value=r.model; if(r.photo) setPh(r.photo,true); };
@@ -973,7 +974,7 @@ function viewInstall(){
     if((hit?hit.r.model:$("inModel").value)==="AOSD"&&CONS_MODELS.indexOf("AOSD")>=0) return show("No need to install AOSDs here. The AOSD red tag takes 1 off your truck and installs it at the site.");
     if(hit){
       if(hit.m!==cur) return show(sn+" is listed in "+hit.m+" inventory. Switch to "+hit.m+" at the top.");
-      if(hit.r.loc==="SITE") return show(sn+" is already installed"+(hit.r.site?" at "+hit.r.site:"")+".");
+      if(hit.r.loc==="SITE"&&hit.r.site) return show(sn+" is already installed at "+hit.r.site+".");
       if(hit.r.status!=="GOOD") return show(sn+" is marked bad. Pick a good spare.");
     } else {
       d.model=$("inModel").value; d.asset=af.value; d.scan=scanRaw;

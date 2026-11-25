@@ -723,7 +723,8 @@ function installRadio(token, market, d) {
     if (hit) {
       r = hit.r;
       loc = String(sh.getRange(r, col('LOCATION')).getValue()).toUpperCase();
-      if (loc === 'SITE') throw new Error('ALREADY_INSTALLED:' + sh.getRange(r, col('NOTES')).getValue());
+      // installed with no site written down: let the install fill in the site
+      if (loc === 'SITE' && String(sh.getRange(r, col('NOTES')).getValue()).trim()) throw new Error('ALREADY_INSTALLED:' + sh.getRange(r, col('NOTES')).getValue());
       if (String(sh.getRange(r, col('STATUS')).getValue() || 'GOOD').toUpperCase() !== 'GOOD') throw new Error('NOT_GOOD');
     } else {
       if (!d.model) throw new Error('NOT_IN_INVENTORY');
